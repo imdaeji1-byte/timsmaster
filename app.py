@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 설정
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# Custom CSS - 요일 칸 아래쪽 굵은선 보완 완료
+# Custom CSS - 요일 배경/글자 완벽 고정 & 굵은 구분선 일괄 통일
 st.markdown("""
 <style>
     @media print {
@@ -65,7 +65,7 @@ st.markdown("""
         width: 4% !important;
         vertical-align: middle !important;
         border-right: 3.5px solid #0f172a !important;
-        border-bottom: 3.5px solid #0f172a !important; /* 요일 칸 밑바닥 굵은선 */
+        border-bottom: 3.5px solid #0f172a !important;
         padding: 4px 2px !important;
     }
     
@@ -388,8 +388,8 @@ def apply_swaps_and_subs(base_df, current_week_dates):
 parsed_df = apply_swaps_and_subs(p_df, current_week_dates)
 teacher_list = t_list
 
-# 표 생성 함수 (학급별 & 교사별 주간 시간표)
-def build_weekly_html_table(filtered_df, title_name):
+# 표 생성 함수 (학급별 & 교사별 주간 시간표) - 교사별 대강 정확 표시 적용
+def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]
     periods = list(range(1, 8))
     html = f"<div style='text-align: center; margin-bottom: 12px;'><h3>🏫 {title_name} 주간 시간표 ({mon_str} ~ {fri_str})</h3></div>"
@@ -403,21 +403,52 @@ def build_weekly_html_table(filtered_df, title_name):
         html += f"<tr><td class='period-col'>{p}교시</td>"
         for d in days:
             date_str = current_week_dates[d].strftime("%Y-%m-%d")
-            cell_data = filtered_df[(filtered_df["요일"] == d) & (filtered_df["교시"] == p)]
+            
+            # 셀 검색 (학급별 vs 교사별)
+            cell_data = pd.DataFrame()
+            is_sub_entry = False
+            sub_info = None
+            
+            if filter_type == "CLASS":
+                cell_data = all_parsed_df[(all_parsed_df["학급"] == title_name) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
+            else: # TEACHER
+                # 1) 본인 원래/교체 시간표 검색
+                cell_data = all_parsed_df[(all_parsed_df["교사"] == title_name) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
+                
+                # 2) 본인이 대강 들어가는 수업인지 검색
+                for sub_key, sub_val in sub_dict.items():
+                    if sub_key[0] == date_str and int(sub_key[2]) == p and sub_val["대강교사"] == title_name:
+                        # 해당 학급의 과목 정보 가져오기
+                        target_class = sub_key[1]
+                        cls_cell = all_parsed_df[(all_parsed_df["학급"] == target_class) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
+                        if not cls_cell.empty:
+                            cell_data = cls_cell
+                            is_sub_entry = True
+                            sub_info = sub_val
+                            break
+
             if not cell_data.empty:
                 row = cell_data.iloc[0]
                 subj, teacher, cls, is_swapped = row["과목"], row["교사"], row["학급"], row.get("is_swapped", False)
                 sub_key = (date_str, cls, p)
                 cell_class, badge_html = "", ""
-                if sub_key in sub_dict:
+                
+                if is_sub_entry or sub_key in sub_dict:
                     cell_class = "bg-substitute"
-                    sub_info = sub_dict[sub_key]
-                    badge_html = f"<span class='status-badge badge-sub'>📝대강 ({sub_info['대강교사']})</span><br>"
-                    teacher = f"<s>{teacher}</s> ➔ <b>{sub_info['대강교사']}</b>"
+                    if not sub_info: sub_info = sub_dict[sub_key]
+                    
+                    if filter_type == "TEACHER" and sub_info["대강교사"] == title_name:
+                        badge_html = f"<span class='status-badge badge-sub'>📝대강수업 [{cls}]</span><br>"
+                        teacher = f"<b>{title_name} (대강)</b>"
+                    else:
+                        badge_html = f"<span class='status-badge badge-sub'>📝대강 ({sub_info['대강교사']})</span><br>"
+                        teacher = f"<s>{teacher}</s> ➔ <b>{sub_info['대강교사']}</b>"
                 elif is_swapped:
                     cell_class = "bg-swapped"
                     badge_html = "<span class='status-badge badge-swap'>🔄수업교체</span><br>"
-                html += f"<td class='{cell_class}'>{badge_html}<div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div></td>"
+                
+                display_teacher = f"({teacher})" if filter_type == "CLASS" else f"[{cls}]"
+                html += f"<td class='{cell_class}'>{badge_html}<div class='subject-name'>{subj}</div><div class='teacher-name'>{display_teacher}</div></td>"
             else: html += "<td>-</td>"
         html += "</tr>"
     html += "</tbody></table></div>"
@@ -464,14 +495,14 @@ def build_merged_full_grid_html(df_in):
     html += "</tbody></table></div>"
     return html
 
-# 6. 메인 탭 구동
+# 6. 메인 탭 구동 (학생/교사 모드에서는 '교사 시수 & 대강 수당' 메뉴 숨김)
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     
     if is_admin:
-        tab1, tab2, tab3, tab4 = st.tabs(["🗓️ 시간표 조회 (전체/반/교사)", "🔄 수업 위치 맞교환 신청", "📝 대강 지정 및 사유 (관리자 전용)", "📊 교사 시수 & 대강 수당"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🗓️ 시간표 조회 (전체/반/교사)", "🔄 수업 위치 맞교환 신청", "📝 대강 지정 및 사유 (관리자 전용)", "📊 교사 시수 & 대강 수당 (관리자 전용)"])
     else:
-        tab1, tab2, tab4 = st.tabs(["🗓️ 시간표 조회 (전체/반/교사)", "🔄 수업 위치 맞교환 신청", "📊 교사 시수 & 대강 수당"])
+        tab1, tab2 = st.tabs(["🗓️ 시간표 조회 (전체/반/교사)", "🔄 수업 위치 맞교환 신청"])
 
     with tab1:
         c_v1, c_v2 = st.columns([3, 1])
@@ -484,10 +515,10 @@ if parsed_df is not None and not parsed_df.empty:
             st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
         elif view_mode == "학급별 주간 시간표":
             target_cls = st.selectbox("🎯 학급 선택", sorted(parsed_df["학급"].unique()))
-            st.markdown(build_weekly_html_table(parsed_df[parsed_df["학급"] == target_cls], target_cls), unsafe_allow_html=True)
+            st.markdown(build_weekly_html_table(parsed_df, target_cls, filter_type="CLASS"), unsafe_allow_html=True)
         else:
             target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list)
-            st.markdown(build_weekly_html_table(parsed_df[parsed_df["교사"] == target_t], f"{target_t} 선생님"), unsafe_allow_html=True)
+            st.markdown(build_weekly_html_table(parsed_df, target_t, filter_type="TEACHER"), unsafe_allow_html=True)
 
     with tab2:
         st.subheader("🔄 날짜 지정 기반 수업 맞교환 신청 (승인 요청제)")
@@ -637,53 +668,53 @@ if parsed_df is not None and not parsed_df.empty:
                     else:
                         st.error("⚠️ 해당 날짜/교시에 대강이 가능한 빈 교사가 없습니다.")
 
-    with tab4:
-        st.subheader("📊 교사별 주당 시수 & 기간별 대강일지 인쇄/출력")
-        c_s1, c_s2 = st.columns([1, 1.8])
-        
-        with c_s1:
-            st.markdown("##### 📌 교사별 기본 주당 수업 시수")
-            tc = parsed_df["교사"].value_counts().reset_index()
-            tc.columns = ["교사명", "주당 수업 시수"]
-            st.dataframe(tc, use_container_width=True)
-
-        with c_s2:
-            st.markdown("##### 📑 기간별 대강일지 검색 및 엑셀 다운로드")
+        with tab4:
+            st.subheader("📊 교사별 주당 시수 & 기간별 대강일지 인쇄/출력 (관리자 전용)")
+            c_s1, c_s2 = st.columns([1, 1.8])
             
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                start_filter = st.date_input("조회 시작일", date(2026, 8, 1))
-            with col_d2:
-                end_filter = st.date_input("조회 종료일", date(2026, 8, 31))
+            with c_s1:
+                st.markdown("##### 📌 교사별 기본 주당 수업 시수")
+                tc = parsed_df["교사"].value_counts().reset_index()
+                tc.columns = ["교사명", "주당 수업 시수"]
+                st.dataframe(tc, use_container_width=True)
+
+            with c_s2:
+                st.markdown("##### 📑 기간별 대강일지 검색 및 엑셀 다운로드")
                 
-            if len(st.session_state.sub_logs) > 0:
-                all_sub_df = pd.DataFrame(st.session_state.sub_logs)
-                all_sub_df["날짜_dt"] = pd.to_datetime(all_sub_df["날짜"]).dt.date
-                
-                filtered_sub = all_sub_df[
-                    (all_sub_df["날짜_dt"] >= start_filter) & (all_sub_df["날짜_dt"] <= end_filter)
-                ].copy()
-                
-                if not filtered_sub.empty:
-                    filtered_sub["지급액"] = filtered_sub["단가"]
-                    export_df = filtered_sub[["날짜", "요일", "교시", "학급", "원교사", "대강교사", "대강사유", "단가"]].rename(
-                        columns={
-                            "날짜": "일자", "요일": "요일", "교시": "교시", "학급": "대상학급",
-                            "원교사": "기존교사", "대강교사": "대강교사", "대강사유": "대강사유", "단가": "대강수당(원)"
-                        }
-                    )
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    start_filter = st.date_input("조회 시작일", date(2026, 8, 1))
+                with col_d2:
+                    end_filter = st.date_input("조회 종료일", date(2026, 8, 31))
                     
-                    st.dataframe(export_df, use_container_width=True)
+                if len(st.session_state.sub_logs) > 0:
+                    all_sub_df = pd.DataFrame(st.session_state.sub_logs)
+                    all_sub_df["날짜_dt"] = pd.to_datetime(all_sub_df["날짜"]).dt.date
                     
-                    csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
-                    st.download_button(
-                        label=f"📥 대강일지 ({start_filter} ~ {end_filter}) 엑셀(CSV) 다운로드",
-                        data=csv_data,
-                        file_name=f"{st.session_state.school_name}_대강일지_{start_filter}_~_{end_filter}.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
+                    filtered_sub = all_sub_df[
+                        (all_sub_df["날짜_dt"] >= start_filter) & (all_sub_df["날짜_dt"] <= end_filter)
+                    ].copy()
+                    
+                    if not filtered_sub.empty:
+                        filtered_sub["지급액"] = filtered_sub["단가"]
+                        export_df = filtered_sub[["날짜", "요일", "교시", "학급", "원교사", "대강교사", "대강사유", "단가"]].rename(
+                            columns={
+                                "날짜": "일자", "요일": "요일", "교시": "교시", "학급": "대상학급",
+                                "원교사": "기존교사", "대강교사": "대강교사", "대강사유": "대강사유", "단가": "대강수당(원)"
+                            }
+                        )
+                        
+                        st.dataframe(export_df, use_container_width=True)
+                        
+                        csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
+                        st.download_button(
+                            label=f"📥 대강일지 ({start_filter} ~ {end_filter}) 엑셀(CSV) 다운로드",
+                            data=csv_data,
+                            file_name=f"{st.session_state.school_name}_대강일지_{start_filter}_~_{end_filter}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("선택하신 기간 동안 지정된 대강 이력이 없습니다.")
                 else:
-                    st.info("선택하신 기간 동안 지정된 대강 이력이 없습니다.")
-            else:
-                st.info("등록된 대강 기록이 존재하지 않습니다.")
+                    st.info("등록된 대강 기록이 존재하지 않습니다.")
