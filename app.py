@@ -4,10 +4,10 @@ import sqlite3
 import os
 from datetime import datetime, timedelta, date
 
-# 1. 페이지 설정
+# 1. 페이지 설정 및 모바일 뷰포트/확대축소(Pinch Zoom) 허용
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# Custom CSS (선 굵기 차별화 & 모바일 가로 스크롤 고정 헤더 적용)
+# Custom CSS - 3개 표 디자인/테두리 완벽 통일 & 모바일 화면 맞춤
 st.markdown("""
 <style>
     @media print {
@@ -16,51 +16,44 @@ st.markdown("""
         body { zoom: 80%; }
     }
     
-    /* 모바일 대응 가로 스크롤 컨테이너 */
+    /* 모바일 한 화면 맞춤 컨테이너 */
     .table-container {
         width: 100%;
         overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
         margin-bottom: 20px;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.08);
     }
     
-    .timetable-poster {
-        width: 100%; min-width: 800px; border-collapse: collapse; text-align: center; background-color: #ffffff;
-    }
-    .timetable-poster th { background-color: #1e3a8a; color: #ffffff; padding: 12px; font-size: 16px; font-weight: bold; border: 1px solid #1e3a8a; }
-    .timetable-poster td { border: 1px solid #cbd5e1; padding: 10px 6px; height: 65px; vertical-align: middle; }
-    
-    .subject-name { font-size: 15px; font-weight: 800; color: #0f172a; line-height: 1.2; }
-    .teacher-name { font-size: 14px; font-weight: 700; color: #1e293b; margin-top: 4px; }
-    .bg-swapped { background-color: #fef08a !important; border: 2px solid #eab308 !important; }
-    .bg-substitute { background-color: #ffedd5 !important; border: 2px solid #f97316 !important; }
-    .status-badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold; display: inline-block; margin-bottom: 3px; }
-    .badge-swap { background-color: #ca8a04; color: white; }
-    .badge-sub { background-color: #ea580c; color: white; }
-    
-    /* 전체 시간표 선 및 가독성 대폭 향상 */
-    .grid-table {
+    /* 통일된 시계형 메인 테이블 디자인 */
+    .unified-table {
         width: 100%;
-        min-width: 950px; /* 모바일에서 찌그러지지 않도록 최소 너비 지정 */
         border-collapse: collapse;
         text-align: center;
-        font-size: 14px;
+        font-size: 13px;
         background-color: #ffffff;
+        table-layout: fixed;
     }
-    .grid-table th {
-        background-color: #1e3a8a;
-        color: white;
-        padding: 10px 6px;
+    
+    /* 헤더 스타일 (교시, 요일, 학급 공통 진한 파랑 + 흰색 글씨) */
+    .unified-table th {
+        background-color: #1e3a8a !important;
+        color: #ffffff !important;
+        padding: 10px 4px;
         font-weight: bold;
-        border-right: 1.5px solid #64748b; /* 반 구분선 (헤더) */
-        border-bottom: 2px solid #0f172a;
+        font-size: 14px;
+        border: 1px solid #1e3a8a;
     }
-    .grid-table td {
-        padding: 8px 4px;
-        border-right: 1.5px solid #94a3b8; /* 반 구분선 (몸통) - 또렷한 회색선 */
-        border-bottom: 1px solid #cbd5e1; /* 같은 요일 내 교시 구분선 */
+    
+    /* 일반 셀 스타일 */
+    .unified-table td {
+        padding: 8px 2px;
+        border-right: 1px solid #cbd5e1;
+        border-left: 1px solid #cbd5e1;
+        border-bottom: 1px solid #e2e8f0;
+        vertical-align: middle;
+        height: 60px;
+        word-break: break-all;
     }
     
     /* 요일 기둥 & 교시 기둥 스타일 */
@@ -68,8 +61,8 @@ st.markdown("""
         background-color: #1e3a8a !important;
         color: #ffffff !important;
         font-weight: 800;
-        font-size: 16px;
-        width: 5% !important;
+        font-size: 15px;
+        width: 6% !important;
         vertical-align: middle;
         border-right: 2px solid #0f172a !important;
     }
@@ -77,12 +70,22 @@ st.markdown("""
         background-color: #f1f5f9 !important;
         font-weight: bold;
         color: #1e293b;
-        width: 5% !important;
-        font-size: 14px;
+        width: 6% !important;
+        font-size: 13px;
         border-right: 2px solid #0f172a !important;
     }
     
-    /* 요일별 확실한 구분선 (검은색 굵은선) */
+    .subject-name { font-size: 14px; font-weight: 800; color: #0f172a; line-height: 1.2; }
+    .teacher-name { font-size: 12px; font-weight: 700; color: #334155; margin-top: 2px; }
+    
+    .bg-swapped { background-color: #fef08a !important; border: 2px solid #eab308 !important; }
+    .bg-substitute { background-color: #ffedd5 !important; border: 2px solid #f97316 !important; }
+    
+    .status-badge { font-size: 10px; padding: 2px 4px; border-radius: 4px; font-weight: bold; display: inline-block; margin-bottom: 2px; }
+    .badge-swap { background-color: #ca8a04; color: white; }
+    .badge-sub { background-color: #ea580c; color: white; }
+    
+    /* 요일별 명확한 굵은 검은색 구분선 */
     .day-border-bottom td {
         border-bottom: 3.5px solid #0f172a !important;
     }
@@ -358,13 +361,13 @@ def apply_swaps_and_subs(base_df, current_week_dates):
 parsed_df = apply_swaps_and_subs(p_df, current_week_dates)
 teacher_list = t_list
 
-# 표 생성 함수 (모바일 가로 스크롤 감싸기)
+# 통일된 표 생성 함수 (학급별 & 교사별 주간 시간표)
 def build_weekly_html_table(filtered_df, title_name):
     days = ["월", "화", "수", "목", "금"]
     periods = list(range(1, 8))
     html = f"<div style='text-align: center; margin-bottom: 12px;'><h3>🏫 {title_name} 주간 시간표 ({mon_str} ~ {fri_str})</h3></div>"
-    html += "<div class='table-container'><table class='timetable-poster'><thead><tr><th class='period-col'>교시</th>"
-    for d in days: html += f"<th>{d} ({current_week_dates[d].strftime('%m/%d')})</th>"
+    html += "<div class='table-container'><table class='unified-table'><thead><tr><th style='width:8%; color:white !important;'>교시</th>"
+    for d in days: html += f"<th style='color:white !important;'>{d} ({current_week_dates[d].strftime('%m/%d')})</th>"
     html += "</tr></thead><tbody>"
     sub_dict = { (log["학급"], log["요일"], int(str(log["교시"]).replace("교시","")), log["주차"]): log for log in st.session_state.sub_logs }
     
@@ -384,23 +387,24 @@ def build_weekly_html_table(filtered_df, title_name):
                 elif is_swapped:
                     cell_class = "bg-swapped"
                     badge_html = "<span class='status-badge badge-swap'>🔄수업교체</span><br>"
-                html += f"<td class='{cell_class}'>{badge_html}<div class='subject-name'>{subj}</div><div class='teacher-name'>{teacher}</div></td>"
+                html += f"<td class='{cell_class}'>{badge_html}<div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div></td>"
             else: html += "<td>-</td>"
         html += "</tr>"
     html += "</tbody></table></div>"
     return html
 
+# 통일된 표 생성 함수 (전체 시간표)
 def build_merged_full_grid_html(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
     sub_dict = { (log["학급"], log["요일"], int(str(log["교시"]).replace("교시","")), log["주차"]): log for log in st.session_state.sub_logs }
     
-    html = "<div class='table-container'><table class='grid-table'><thead><tr><th style='width: 5%;'>요일</th><th style='width: 5%;'>교시</th>"
-    for c in classes: html += f"<th>{c}</th>"
+    html = "<div class='table-container'><table class='unified-table'><thead><tr><th style='width: 6%; color:white !important;'>요일</th><th style='width: 6%; color:white !important;'>교시</th>"
+    for c in classes: html += f"<th style='color:white !important;'>{c}</th>"
     html += "</tr></thead><tbody>"
     
     for d in days:
-        day_label = f"<b>{d}</b><br><span style='font-size:11px; font-weight:normal;'>({current_week_dates[d].strftime('%m/%d')})</span>"
+        day_label = f"<b>{d}</b><br><span style='font-size:10px; font-weight:normal;'>({current_week_dates[d].strftime('%m/%d')})</span>"
         for p in range(1, 8):
             border_cls = "day-border-bottom" if p == 7 else ""
             html += f"<tr class='{border_cls}'>"
@@ -417,7 +421,7 @@ def build_merged_full_grid_html(df_in):
                     elif is_swapped:
                         bg_color, txt = "#fef08a", f"<span class='badge-swap status-badge'>교체</span><br><b>{subj}</b><br><b>({teacher})</b>"
                     else:
-                        bg_color, txt = "#ffffff", f"<b>{subj}</b><br><span style='color:#1e293b; font-size:14px; font-weight:700;'>({teacher})</span>"
+                        bg_color, txt = "#ffffff", f"<b>{subj}</b><br><span style='color:#334155; font-size:12px; font-weight:700;'>({teacher})</span>"
                     html += f"<td style='background-color: {bg_color};'>{txt}</td>"
                 else: html += "<td>-</td>"
             html += "</tr>"
