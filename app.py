@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 설정
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# Custom CSS
+# Custom CSS - 모바일 다크모드 가독성 완벽 보장 (!important 적용)
 st.markdown("""
 <style>
     @media print {
@@ -29,7 +29,7 @@ st.markdown("""
         border-collapse: collapse;
         text-align: center;
         font-size: 13px;
-        background-color: #ffffff;
+        background-color: #ffffff !important;
         table-layout: fixed;
     }
     
@@ -43,6 +43,7 @@ st.markdown("""
     }
     
     .unified-table td {
+        background-color: #ffffff !important; /* 다크모드 배경 반전 차단 */
         padding: 8px 2px;
         border-right: 1px solid #cbd5e1;
         border-left: 1px solid #cbd5e1;
@@ -64,21 +65,32 @@ st.markdown("""
     .period-col {
         background-color: #f1f5f9 !important;
         font-weight: bold;
-        color: #1e293b;
+        color: #1e293b !important;
         width: 6% !important;
         font-size: 13px;
         border-right: 2px solid #0f172a !important;
     }
     
-    .subject-name { font-size: 14px; font-weight: 800; color: #0f172a; line-height: 1.2; }
-    .teacher-name { font-size: 12px; font-weight: 700; color: #334155; margin-top: 2px; }
+    /* 다크모드 강제 폰트 색상 반전 방지 */
+    .subject-name { 
+        font-size: 14px; 
+        font-weight: 800; 
+        color: #0f172a !important; 
+        line-height: 1.2; 
+    }
+    .teacher-name { 
+        font-size: 12px; 
+        font-weight: 700; 
+        color: #334155 !important; 
+        margin-top: 2px; 
+    }
     
     .bg-swapped { background-color: #fef08a !important; border: 2px solid #eab308 !important; }
     .bg-substitute { background-color: #ffedd5 !important; border: 2px solid #f97316 !important; }
     
     .status-badge { font-size: 10px; padding: 2px 4px; border-radius: 4px; font-weight: bold; display: inline-block; margin-bottom: 2px; }
-    .badge-swap { background-color: #ca8a04; color: white; }
-    .badge-sub { background-color: #ea580c; color: white; }
+    .badge-swap { background-color: #ca8a04 !important; color: white !important; }
+    .badge-sub { background-color: #ea580c !important; color: white !important; }
     
     .day-border-bottom td {
         border-bottom: 3.5px solid #0f172a !important;
