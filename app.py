@@ -205,6 +205,57 @@ current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str = current_week_dates["월"].strftime("%Y-%m-%d")
 fri_str = current_week_dates["금"].strftime("%Y-%m-%d")
 
+# URL 파라미터를 통한 JS 액션 수신 및 DB 자동 연동
+query_params = st.query_params
+if "action" in query_params:
+    act = query_params.get("action")
+    t_date = query_params.get("date", "")
+    t_cls = query_params.get("cls", "")
+    t_period = int(query_params.get("period", 1))
+    t_subj = query_params.get("subj", "")
+    t_teacher = query_params.get("teacher", "")
+    
+    c_date = query_params.get("c_date", "")
+    c_cls = query_params.get("c_cls", "")
+    c_period = int(query_params.get("c_period", 1)) if query_params.get("c_period") else 1
+    c_subj = query_params.get("c_subj", "")
+    c_teacher = query_params.get("c_teacher", "")
+    
+    # 쿼리 파라미터 청소 (중복 실행 방지)
+    st.query_params.clear()
+
+    if act == "DELETE":
+        log_entry = {
+            "날짜": t_date, "요일": ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()], "교시": t_period,
+            "학급": t_cls, "원교사": t_teacher, "대강교사": "휴강", "대강사유": "관리자 삭제",
+            "단가": 0, "주차": st.session_state.week_offset
+        }
+        save_sub_log(log_entry)
+        st.session_state.sub_logs = load_sub_logs()
+        st.success(f"🗑️ [{t_cls}] {t_period}교시 수업이 삭제(휴강) 처리되었습니다.")
+        st.rerun()
+
+    elif act == "PASTE_OVERWRITE":
+        log_entry = {
+            "날짜": t_date, "요일": ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()], "교시": t_period,
+            "학급": t_cls, "원교사": t_teacher, "대강교사": c_teacher, "대강사유": f"복사 붙여넣기({c_subj})",
+            "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset
+        }
+        save_sub_log(log_entry)
+        st.session_state.sub_logs = load_sub_logs()
+        st.success(f"📥 [{t_cls}] {t_period}교시에 [{c_subj}({c_teacher})] 수업이 덮어쓰기 되었습니다.")
+        st.rerun()
+
+    elif act == "PASTE_SWAP":
+        swap_entry = {
+            "cls1": c_cls, "date1": c_date, "period1": c_period, "subj1": c_subj, "teacher1": c_teacher,
+            "cls2": t_cls, "date2": t_date, "period2": t_period, "subj2": t_subj, "teacher2": t_teacher
+        }
+        save_swap_request(swap_entry, auto_approve=True)
+        st.session_state.swap_logs = load_swap_logs("APPROVED")
+        st.success(f"🔀 [{c_cls}] {c_period}교시와 [{t_cls}] {t_period}교시 수업이 서로 교체되었습니다.")
+        st.rerun()
+
 # 4. 사이드바
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
 mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
@@ -451,7 +502,7 @@ def build_merged_full_grid_html(df_in):
     html += "</tbody></table></div>"
     return html
 
-# 6. 관리자용 인터랙티브 JS 그리드 (이벤트 양방향 바인딩 및 DB 즉시 갱신 연동)
+# 6. 관리자용 인터랙티브 JS 그리드 (Query Parameter 전달 동기화 구현)
 def render_interactive_admin_grid(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
@@ -500,7 +551,7 @@ def render_interactive_admin_grid(df_in):
             .bg-sub {{ background-color: #ffedd5 !important; }}
             .bg-swap {{ background-color: #fef08a !important; }}
             
-            .context-menu {{ display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }}
+            .context-menu {{ display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }}
             .context-menu-item {{ padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }}
             .context-menu-item:hover {{ background-color: #f1f5f9; color: #2563eb; }}
             .context-menu-divider {{ height: 1px; background-color: #e2e8f0; margin: 4px 0; }}
@@ -593,9 +644,7 @@ def render_interactive_admin_grid(df_in):
                         }}
                         
                         td.innerHTML = txt;
-                        
                         td.onclick = (e) => selectCell(key, td);
-                        
                         td.oncontextmenu = (e) => {{
                             e.preventDefault();
                             selectCell(key, td);
@@ -652,14 +701,6 @@ def render_interactive_admin_grid(df_in):
             document.getElementById("pasteModal").style.display = "none";
         }}
 
-        function sendToStreamlit(data) {{
-            const input = window.parent.document.querySelector('input[data-testid="stTextInput"]');
-            const form = window.parent.document.querySelector('form');
-            if (window.Streamlit) {{
-                window.Streamlit.setComponentValue(data);
-            }}
-        }}
-
         function onMenuAction(actionType) {{
             hideContextMenu();
             closePasteModal();
@@ -670,12 +711,15 @@ def render_interactive_admin_grid(df_in):
                 return;
             }}
             
-            const payload = {{ action: actionType, targetKey: selectedKey, item: gridData[selectedKey], copied: copiedData }};
+            const item = gridData[selectedKey];
+            let url = window.top.location.pathname + `?action=${{actionType}}&date=${{item.date}}&cls=${{encodeURIComponent(item.cls)}}&period=${{item.period}}&subj=${{encodeURIComponent(item.subj)}}&teacher=${{encodeURIComponent(item.teacher)}}`;
             
-            // Streamlit 커스텀 컴포넌트 양방향 값 바인딩 전송
-            if(window.Streamlit) {{
-                window.Streamlit.setComponentValue(payload);
+            if(copiedData) {{
+                url += `&c_date=${{copiedData.date}}&c_cls=${{encodeURIComponent(copiedData.cls)}}&c_period=${{copiedData.period}}&c_subj=${{encodeURIComponent(copiedData.subj)}}&c_teacher=${{encodeURIComponent(copiedData.teacher)}}`;
             }}
+            
+            // 메인 Streamlit 백엔드로 즉시 동기화 이동
+            window.top.location.href = url;
         }}
 
         window.onclick = (e) => {{
@@ -684,7 +728,6 @@ def render_interactive_admin_grid(df_in):
 
         window.addEventListener("keydown", (e) => {{
             if(!selectedKey) return;
-            
             if(e.key === "Delete" || e.key === "Backspace") {{
                 onMenuAction("DELETE");
             }} else if(e.ctrlKey && e.key === "c") {{
@@ -698,25 +741,13 @@ def render_interactive_admin_grid(df_in):
             }}
         }});
 
-        // Streamlit Component API 초기화
-        function initStreamlit() {{
-            if (window.Streamlit) {{
-                window.Streamlit.setFrameHeight(680);
-            }} else {{
-                setTimeout(initStreamlit, 100);
-            }}
-        }}
-        initStreamlit();
-
         renderGrid();
     </script>
     """
     
-    # Streamlit Component 이벤트 수신
-    event_data = components.html(html_code, height=680, scrolling=True)
-    return event_data
+    return components.html(html_code, height=680, scrolling=True)
 
-# 7. 메인 탭 구동 및 백엔드 DB 연동 자동 처리
+# 7. 메인 탭 구동
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     
@@ -736,54 +767,7 @@ if parsed_df is not None and not parsed_df.empty:
         if view_mode == "전체 시간표 (가로: 학급 / 세로: 요일·교시)":
             if is_admin:
                 st.info("💡 **관리자 가이드**: 셀 **좌클릭**(선택) 후 키보드로 **Delete**(삭제), **Ctrl+C**(복사), **Ctrl+V**(붙여넣기) 사용 가능하며, **우클릭** 시 스마트 편집 메뉴가 표시됩니다.")
-                grid_action = render_interactive_admin_grid(parsed_df)
-                
-                # JS 이벤트 동작 수신 및 DB 자동 처리 로직
-                if grid_action and isinstance(grid_action, dict):
-                    act = grid_action.get("action")
-                    target_item = grid_action.get("item", {})
-                    copied_item = grid_action.get("copied", {})
-                    
-                    if act == "SWAP":
-                        st.session_state["shortcut_swap_target"] = target_item
-                        st.success(f"🔄 [{target_item.get('cls')}] {target_item.get('day')}요일 {target_item.get('period')}교시 맞교환 모드로 이동합니다.")
-                    elif act == "SUB":
-                        st.session_state["shortcut_sub_target"] = target_item
-                        st.success(f"📝 [{target_item.get('cls')}] {target_item.get('day')}요일 {target_item.get('period')}교시 대강 모드로 이동합니다.")
-                    elif act == "DELETE":
-                        # DB 대강 일지에 삭제(휴강) 등록
-                        log_entry = {
-                            "날짜": target_item.get("date"), "요일": target_item.get("day"), "교시": int(target_item.get("period")),
-                            "학급": target_item.get("cls"), "원교사": target_item.get("teacher"), "대강교사": "휴강",
-                            "대강사유": "관리자 삭제", "단가": 0, "주차": st.session_state.week_offset
-                        }
-                        save_sub_log(log_entry)
-                        st.session_state.sub_logs = load_sub_logs()
-                        st.success("🗑️ 해당 수업이 삭제(휴강) 처리되었습니다.")
-                        st.rerun()
-                    elif act == "PASTE_OVERWRITE":
-                        if copied_item:
-                            log_entry = {
-                                "날짜": target_item.get("date"), "요일": target_item.get("day"), "교시": int(target_item.get("period")),
-                                "학급": target_item.get("cls"), "원교사": target_item.get("teacher"), "대강교사": copied_item.get("teacher"),
-                                "대강사유": f"복사 붙여넣기 ({copied_item.get('subj')})", "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset
-                            }
-                            save_sub_log(log_entry)
-                            st.session_state.sub_logs = load_sub_logs()
-                            st.success(f"📥 [{target_item.get('cls')}] {target_item.get('day')}요일 {target_item.get('period')}교시에 [{copied_item.get('subj')}({copied_item.get('teacher')})] 수업이 덮어쓰기 되었습니다.")
-                            st.rerun()
-                    elif act == "PASTE_SWAP":
-                        if copied_item:
-                            swap_entry = {
-                                "cls1": copied_item.get("cls"), "date1": copied_item.get("date"), "period1": int(copied_item.get("period")),
-                                "subj1": copied_item.get("subj"), "teacher1": copied_item.get("teacher"),
-                                "cls2": target_item.get("cls"), "date2": target_item.get("date"), "period2": int(target_item.get("period")),
-                                "subj2": target_item.get("subj"), "teacher2": target_item.get("teacher")
-                            }
-                            save_swap_request(swap_entry, auto_approve=True)
-                            st.session_state.swap_logs = load_swap_logs("APPROVED")
-                            st.success("🔀 복사 원본 위치와 선택한 셀의 수업이 서로 교체(맞교환)되었습니다.")
-                            st.rerun()
+                render_interactive_admin_grid(parsed_df)
             else:
                 st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
         elif view_mode == "학급별 주간 시간표":
