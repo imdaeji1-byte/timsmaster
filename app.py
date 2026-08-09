@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import os
+import json
 from datetime import datetime, timedelta, date
 
 # 1. 페이지 설정
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# Custom CSS - 요일 배경/글자 완벽 고정 & 굵은 구분선 일괄 통일
+# Custom CSS
 st.markdown("""
 <style>
     @media print {
@@ -33,7 +34,6 @@ st.markdown("""
         table-layout: fixed;
     }
     
-    /* 상단 헤더 */
     .unified-table th {
         background-color: #1e3a8a !important;
         color: #ffffff !important;
@@ -45,7 +45,6 @@ st.markdown("""
         border-right: 3.5px solid #0f172a !important;
     }
     
-    /* 일반 셀 및 세로 굵은선 */
     .unified-table td {
         background-color: #ffffff !important;
         padding: 8px 2px;
@@ -57,7 +56,6 @@ st.markdown("""
         word-break: break-all;
     }
     
-    /* 요일 기둥 (오른쪽 + 아래쪽 모두 굵은선 적용) */
     td.day-col {
         background-color: #1e3a8a !important;
         color: #ffffff !important;
@@ -69,53 +67,17 @@ st.markdown("""
         padding: 4px 2px !important;
     }
     
-    .day-col b {
-        color: #ffffff !important;
-        font-size: 18px !important;
-        display: block !important;
-    }
-
-    .day-col span {
-        color: #f1f5f9 !important;
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        display: block !important;
-    }
-
-    .period-col {
-        background-color: #f1f5f9 !important;
-        font-weight: bold;
-        color: #1e293b !important;
-        width: 5% !important;
-        font-size: 13px;
-        border-right: 3.5px solid #0f172a !important;
-    }
-    
-    /* 과목/교사명 */
-    .subject-name { 
-        font-size: 14px !important; 
-        font-weight: 800 !important; 
-        color: #0f172a !important; 
-        line-height: 1.2; 
-    }
-    .teacher-name { 
-        font-size: 12px !important; 
-        font-weight: 700 !important; 
-        color: #334155 !important; 
-        margin-top: 2px; 
-    }
-    
+    .day-col b { color: #ffffff !important; font-size: 18px !important; display: block !important; }
+    .day-col span { color: #f1f5f9 !important; font-size: 12px !important; font-weight: 700 !important; display: block !important; }
+    .period-col { background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b !important; width: 5% !important; font-size: 13px; border-right: 3.5px solid #0f172a !important; }
+    .subject-name { font-size: 14px !important; font-weight: 800 !important; color: #0f172a !important; line-height: 1.2; }
+    .teacher-name { font-size: 12px !important; font-weight: 700 !important; color: #334155 !important; margin-top: 2px; }
     .bg-swapped { background-color: #fef08a !important; border: 2px solid #eab308 !important; }
     .bg-substitute { background-color: #ffedd5 !important; border: 2px solid #f97316 !important; }
-    
     .status-badge { font-size: 10px; padding: 2px 4px; border-radius: 4px; font-weight: bold; display: inline-block; margin-bottom: 2px; }
     .badge-swap { background-color: #ca8a04 !important; color: white !important; }
     .badge-sub { background-color: #ea580c !important; color: white !important; }
-    
-    /* 요일 구분 7교시 밑 굵은 가로선 */
-    tr.day-border-bottom td {
-        border-bottom: 3.5px solid #0f172a !important;
-    }
+    tr.day-border-bottom td { border-bottom: 3.5px solid #0f172a !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -183,14 +145,15 @@ def load_swap_logs(status_filter="APPROVED"):
         conn.close()
     return logs
 
-def save_swap_request(log):
+def save_swap_request(log, auto_approve=False):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    status = 'APPROVED' if auto_approve else 'PENDING'
     c.execute("""
         INSERT INTO swap_logs (cls1, date1, period1, subj1, teacher1, cls2, date2, period2, subj2, teacher2, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (log["cls1"], log["date1"], log["period1"], log["subj1"], log["teacher1"],
-          log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"]))
+          log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"], status))
     conn.commit()
     conn.close()
 
@@ -220,11 +183,13 @@ if "raw_df" not in st.session_state:
     st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
+if "js_click_event" not in st.session_state:
+    st.session_state.js_click_event = None
 
 st.session_state.sub_logs = load_sub_logs()
 st.session_state.swap_logs = load_swap_logs("APPROVED")
 
-# 주차 날짜 계산 (2026-08-10 월요일 기준)
+# 주차 날짜 계산
 def get_week_dates(offset=0):
     base_date = date(2026, 8, 10)
     target_date = base_date + timedelta(weeks=offset)
@@ -316,8 +281,7 @@ with c_mid:
 
 # 엑셀 파싱
 def parse_excel_timetable(df_in):
-    if df_in is None:
-        return None, []
+    if df_in is None: return None, []
     df_proc = df_in.copy()
     cols = df_proc.columns
     row0 = df_proc.iloc[0]
@@ -388,7 +352,7 @@ def apply_swaps_and_subs(base_df, current_week_dates):
 parsed_df = apply_swaps_and_subs(p_df, current_week_dates)
 teacher_list = t_list
 
-# 표 생성 함수 (학급별 & 교사별 주간 시간표) - 교사별 대강 정확 표시 적용
+# 일반 학급/교사별 주간 시간표 HTML 생성
 def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]
     periods = list(range(1, 8))
@@ -403,22 +367,16 @@ def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
         html += f"<tr><td class='period-col'>{p}교시</td>"
         for d in days:
             date_str = current_week_dates[d].strftime("%Y-%m-%d")
-            
-            # 셀 검색 (학급별 vs 교사별)
             cell_data = pd.DataFrame()
             is_sub_entry = False
             sub_info = None
             
             if filter_type == "CLASS":
                 cell_data = all_parsed_df[(all_parsed_df["학급"] == title_name) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
-            else: # TEACHER
-                # 1) 본인 원래/교체 시간표 검색
+            else:
                 cell_data = all_parsed_df[(all_parsed_df["교사"] == title_name) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
-                
-                # 2) 본인이 대강 들어가는 수업인지 검색
                 for sub_key, sub_val in sub_dict.items():
                     if sub_key[0] == date_str and int(sub_key[2]) == p and sub_val["대강교사"] == title_name:
-                        # 해당 학급의 과목 정보 가져오기
                         target_class = sub_key[1]
                         cls_cell = all_parsed_df[(all_parsed_df["학급"] == target_class) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
                         if not cls_cell.empty:
@@ -436,7 +394,6 @@ def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
                 if is_sub_entry or sub_key in sub_dict:
                     cell_class = "bg-substitute"
                     if not sub_info: sub_info = sub_dict[sub_key]
-                    
                     if filter_type == "TEACHER" and sub_info["대강교사"] == title_name:
                         badge_html = f"<span class='status-badge badge-sub'>📝대강수업 [{cls}]</span><br>"
                         teacher = f"<b>{title_name} (대강)</b>"
@@ -454,65 +411,223 @@ def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     html += "</tbody></table></div>"
     return html
 
-# 표 생성 함수 (전체 시간표)
-def build_merged_full_grid_html(df_in):
+# 6. 관리자용 인터랙티브 JS 그리드 컴포넌트 생성 함수 (좌클릭, Delete, Ctrl+C/V 이벤트 감지)
+def render_interactive_admin_grid(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
     sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
     
-    html = "<div class='table-container'><table class='unified-table'><thead><tr><th style='width: 4%; color:white !important;'>요일</th><th style='width: 5%; color:white !important;'>교시</th>"
-    for c in classes: html += f"<th style='color:white !important;'>{c}</th>"
-    html += "</tr></thead><tbody>"
-    
+    # 시간표 JSON 구조 생성
+    grid_data = {}
     for d in days:
         date_str = current_week_dates[d].strftime("%Y-%m-%d")
-        day_label = f"<b>{d}</b><span>({current_week_dates[d].strftime('%m/%d')})</span>"
         for p in range(1, 8):
-            border_cls = "day-border-bottom" if p == 7 else ""
-            html += f"<tr class='{border_cls}'>"
-            if p == 1: html += f"<td rowspan='7' class='day-col'>{day_label}</td>"
-            html += f"<td class='period-col'>{p}교시</td>"
             for c in classes:
                 cell_data = df_in[(df_in["학급"] == c) & (df_in["요일"] == d) & (df_in["교시"] == p)]
+                key = f"{date_str}_{c}_{p}"
                 if not cell_data.empty:
                     row = cell_data.iloc[0]
                     subj, teacher, is_swapped = row["과목"], row["교사"], row.get("is_swapped", False)
                     sub_key = (date_str, c, p)
-                    
-                    if sub_key in sub_dict:
-                        bg_class = "bg-substitute"
-                        txt = f"<span class='badge-sub status-badge'>대강</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({sub_dict[sub_key]['대강교사']})</div>"
-                    elif is_swapped:
-                        bg_class = "bg-swapped"
-                        txt = f"<span class='badge-swap status-badge'>교체</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
-                    else:
-                        bg_class = ""
-                        txt = f"<div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
-                    
-                    html += f"<td class='{bg_class}'>{txt}</td>"
-                else: html += "<td>-</td>"
-            html += "</tr>"
-    html += "</tbody></table></div>"
-    return html
+                    sub_teacher = sub_dict[sub_key]['대강교사'] if sub_key in sub_dict else ""
+                    grid_data[key] = {
+                        "date": date_str, "day": d, "cls": c, "period": p,
+                        "subj": subj, "teacher": teacher, "sub_teacher": sub_teacher,
+                        "is_swapped": is_swapped, "is_sub": sub_key in sub_dict
+                    }
+                else:
+                    grid_data[key] = {
+                        "date": date_str, "day": d, "cls": c, "period": p,
+                        "subj": "", "teacher": "", "sub_teacher": "",
+                        "is_swapped": False, "is_sub": False
+                    }
 
-# 6. 메인 탭 구동 (학생/교사 모드에서는 '교사 시수 & 대강 수당' 메뉴 숨김)
+    js_grid_json = json.dumps(grid_data, ensure_ascii=False)
+    classes_json = json.dumps(classes, ensure_ascii=False)
+    
+    # HTML / JS 커스텀 컴포넌트
+    html_code = f"""
+    <div id="grid-app">
+        <style>
+            .admin-table {{ width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }}
+            .admin-table th {{ background-color: #1e3a8a; color: #ffffff; padding: 10px 4px; font-weight: bold; border: 1px solid #1e3a8a; border-bottom: 3.5px solid #0f172a; border-right: 3.5px solid #0f172a; }}
+            .admin-table td {{ background-color: #ffffff; padding: 6px 2px; border-right: 3.5px solid #0f172a; border-bottom: 1px solid #cbd5e1; height: 60px; vertical-align: middle; cursor: pointer; position: relative; }}
+            .admin-table td:hover {{ filter: brightness(0.92); outline: 2px solid #2563eb; }}
+            .admin-table td.selected {{ outline: 3px solid #ef4444 !important; background-color: #fef2f2 !important; }}
+            .day-col-js {{ background-color: #1e3a8a !important; color: #ffffff !important; font-weight: 800; width: 4%; border-right: 3.5px solid #0f172a !important; border-bottom: 3.5px solid #0f172a !important; }}
+            .period-col-js {{ background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b; width: 5%; border-right: 3.5px solid #0f172a !important; }}
+            .bg-sub {{ background-color: #ffedd5 !important; }}
+            .bg-swap {{ background-color: #fef08a !important; }}
+            
+            /* Modal 팝업 스타일 */
+            .modal-overlay {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }}
+            .modal-content {{ background: white; padding: 20px; border-radius: 12px; width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left; }}
+            .modal-btn {{ display: block; width: 100%; margin: 8px 0; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; }}
+            .btn-swap {{ background: #eab308; color: white; }}
+            .btn-sub {{ background: #f97316; color: white; }}
+            .btn-del {{ background: #ef4444; color: white; }}
+            .btn-close {{ background: #94a3b8; color: white; margin-top: 15px; }}
+        </style>
+
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th style="width: 4%;">요일</th>
+                    <th style="width: 5%;">교시</th>
+                    {"".join([f"<th>{c}</th>" for c in classes])}
+                </tr>
+            </thead>
+            <tbody id="grid-body"></tbody>
+        </table>
+
+        <!-- 모달 팝업 창 -->
+        <div id="cellModal" class="modal-overlay">
+            <div class="modal-content">
+                <h4 id="modalTitle" style="margin-top:0; color:#1e3a8a;">📌 수업 편집 모드</h4>
+                <div id="modalBody"></div>
+                <button class="modal-btn btn-close" onclick="closeModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const gridData = {js_grid_json};
+        const classes = {classes_json};
+        const days = ["월", "화", "수", "목", "금"];
+        let selectedKey = null;
+        let copiedData = null;
+
+        function renderGrid() {{
+            const tbody = document.getElementById("grid-body");
+            tbody.innerHTML = "";
+            
+            days.forEach(d => {{
+                for(let p = 1; p <= 7; p++) {{
+                    const tr = document.createElement("tr");
+                    if(p === 7) tr.style.borderBottom = "3.5px solid #0f172a";
+                    
+                    if(p === 1) {{
+                        const tdDay = document.createElement("td");
+                        tdDay.rowSpan = 7;
+                        tdDay.className = "day-col-js";
+                        tdDay.innerHTML = `<b>${{d}}</b>`;
+                        tr.appendChild(tdDay);
+                    }}
+                    
+                    const tdP = document.createElement("td");
+                    tdP.className = "period-col-js";
+                    tdP.innerText = `${{p}}교시`;
+                    tr.appendChild(tdP);
+
+                    classes.forEach(c => {{
+                        const td = document.createElement("td");
+                        const key = Object.keys(gridData).find(k => gridData[k].day === d && gridData[k].period === p && gridData[k].cls === c);
+                        const item = gridData[key];
+                        
+                        td.id = key;
+                        if(item.is_sub) td.className = "bg-sub";
+                        else if(item.is_swapped) td.className = "bg-swap";
+                        
+                        let txt = "";
+                        if(item.subj) {{
+                            if(item.is_sub) txt = `<span style="font-size:10px; background:#ea580c; color:white; padding:1px 3px; border-radius:3px;">대강</span><br><b>${{item.subj}}</b><br>(${{item.sub_teacher}})`;
+                            else if(item.is_swapped) txt = `<span style="font-size:10px; background:#ca8a04; color:white; padding:1px 3px; border-radius:3px;">교체</span><br><b>${{item.subj}}</b><br>(${{item.teacher}})`;
+                            else txt = `<b>${{item.subj}}</b><br><span style="color:#334155; font-size:12px;">(${{item.teacher}})</span>`;
+                        }} else {{
+                            txt = "-";
+                        }}
+                        
+                        td.innerHTML = txt;
+                        td.onclick = (e) => selectCell(key, td);
+                        tr.appendChild(td);
+                    }});
+                    tbody.appendChild(tr);
+                }}
+            }});
+        }}
+
+        function selectCell(key, element) {{
+            document.querySelectorAll(".admin-table td").forEach(td => td.classList.remove("selected"));
+            selectedKey = key;
+            element.classList.add("selected");
+            openModal(key);
+        }}
+
+        function openModal(key) {{
+            const item = gridData[key];
+            const modal = document.getElementById("cellModal");
+            const title = document.getElementById("modalTitle");
+            const body = document.getElementById("modalBody");
+            
+            title.innerText = `📍 [${{item.cls}}] ${{item.day}}요일 ${{item.period}}교시`;
+            
+            let html = `<p style="margin-bottom:12px;">현재 수업: <b>${{item.subj ? item.subj + ' (' + (item.sub_teacher || item.teacher) + ')' : '수업 없음'}}</b></p>`;
+            html += `<button class="modal-btn btn-swap" onclick="triggerAction('SWAP', '${{key}}')">🔄 수업 위치 맞교환</button>`;
+            html += `<button class="modal-btn btn-sub" onclick="triggerAction('SUB', '${{key}}')">📝 대강 및 사유 지정</button>`;
+            html += `<button class="modal-btn btn-del" onclick="triggerAction('DELETE', '${{key}}')">🗑️ 수업 삭제 (휴강)</button>`;
+            
+            if(copiedData) {{
+                html += `<hr style="margin:12px 0;"><button class="modal-btn" style="background:#2563eb; color:white;" onclick="triggerAction('PASTE_OVERWRITE', '${{key}}')">📋 복사한 수업 덮어쓰기 [${{copiedData.subj}}]</button>`;
+            }}
+            
+            body.innerHTML = html;
+            modal.style.display = "flex";
+        }}
+
+        function closeModal() {{
+            document.getElementById("cellModal").style.display = "none";
+        }}
+
+        function triggerAction(actionType, key) {{
+            closeModal();
+            const payload = {{ action: actionType, targetKey: key, item: gridData[key], copied: copiedData }};
+            window.parent.postMessage({{ type: "TIMEMASTER_GRID_ACTION", data: payload }}, "*");
+        }}
+
+        // 키보드 이벤 수신 (Delete, Ctrl+C, Ctrl+V)
+        window.addEventListener("keydown", (e) => {{
+            if(!selectedKey) return;
+            
+            if(e.key === "Delete" || e.key === "Backspace") {{
+                triggerAction("DELETE", selectedKey);
+            }} else if(e.ctrlKey && e.key === "c") {{
+                copiedData = gridData[selectedKey];
+                alert(`📋 [${{copiedData.subj}}] 수업이 복사되었습니다. 다른 셀 클릭 후 Ctrl+V 하세요.`);
+            }} else if(e.ctrlKey && e.key === "v") {{
+                if(copiedData) {{
+                    triggerAction("PASTE_OVERWRITE", selectedKey);
+                }}
+            }}
+        }});
+
+        renderGrid();
+    </script>
+    """
+    return st.components.v1.html(html_code, height=680, scrolling=True)
+
+# 7. 메인 탭 구동
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     
     if is_admin:
-        tab1, tab2, tab3, tab4 = st.tabs(["🗓️ 시간표 조회 (전체/반/교사)", "🔄 수업 위치 맞교환 신청", "📝 대강 지정 및 사유 (관리자 전용)", "📊 교사 시수 & 대강 수당 (관리자 전용)"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🗓️ 시간표 스마트 통합 관리", "🔄 수업 위치 맞교환 신청", "📝 대강 지정 및 사유 (관리자 전용)", "📊 교사 시수 & 대강 수당 (관리자 전용)"])
     else:
         tab1, tab2 = st.tabs(["🗓️ 시간표 조회 (전체/반/교사)", "🔄 수업 위치 맞교환 신청"])
 
     with tab1:
         c_v1, c_v2 = st.columns([3, 1])
-        with c_v1: view_mode = st.radio("조회 방식", ["전체 시간표 (가로: 학급 / 세로: 요일·교시)", "학급별 주간 시간표", "교사별 주간 시간표"], horizontal=True)
+        with c_v1:
+            view_mode = st.radio("조회 방식", ["전체 시간표 (스마트 인터랙티브)", "학급별 주간 시간표", "교사별 주간 시간표"], horizontal=True)
         with c_v2:
             st.write("")
             st.button("🖨️ 시간표 인쇄 / PDF 저장", on_click=lambda: st.components.v1.html("<script>window.print();</script>"))
 
-        if view_mode == "전체 시간표 (가로: 학급 / 세로: 요일·교시)":
-            st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
+        if view_mode == "전체 시간표 (스마트 인터랙티브)":
+            if is_admin:
+                st.info("💡 **관리자 가이드**: 셀 클릭 시 모달 팝업([교체]/[대강]/[삭제])이 뜨며, PC 키보드로 **Delete(삭제)**, **Ctrl+C(복사)**, **Ctrl+V(붙여넣기)**가 가능합니다.")
+                render_interactive_admin_grid(parsed_df)
+            else:
+                st.markdown(build_weekly_html_table(parsed_df, "전체", filter_type="CLASS"), unsafe_allow_html=True)
         elif view_mode == "학급별 주간 시간표":
             target_cls = st.selectbox("🎯 학급 선택", sorted(parsed_df["학급"].unique()))
             st.markdown(build_weekly_html_table(parsed_df, target_cls, filter_type="CLASS"), unsafe_allow_html=True)
@@ -522,7 +637,6 @@ if parsed_df is not None and not parsed_df.empty:
 
     with tab2:
         st.subheader("🔄 날짜 지정 기반 수업 맞교환 신청 (승인 요청제)")
-        
         if is_admin:
             st.markdown("### 📥 [관리자] 대기 중인 수업 교체 요청 목록")
             conn = sqlite3.connect(DB_FILE)
@@ -543,7 +657,6 @@ if parsed_df is not None and not parsed_df.empty:
             st.markdown("---")
 
         selected_cls = st.selectbox("🎯 대상 학급 선택", sorted(parsed_df["학급"].unique()))
-        
         sub_dict_swap = { (log["날짜"], log["학급"], int(log["교시"])): log["대강교사"] for log in st.session_state.sub_logs }
         
         col_a, col_b = st.columns(2)
@@ -559,7 +672,6 @@ if parsed_df is not None and not parsed_df.empty:
                     p_num = int(cls_df_a.loc[idx, "교시"])
                     if (d_str, selected_cls, p_num) in sub_dict_swap:
                         cls_df_a.loc[idx, "교사"] = f"{sub_dict_swap[(d_str, selected_cls, p_num)]}(대강)"
-                
                 idx_a = st.selectbox("수업 A 선택", cls_df_a.index, format_func=lambda x: f"{cls_df_a.loc[x, '교시']}교시 - {cls_df_a.loc[x, '과목']}({cls_df_a.loc[x, '교사']})")
                 r1 = cls_df_a.loc[idx_a]
             else:
@@ -567,7 +679,7 @@ if parsed_df is not None and not parsed_df.empty:
                 r1 = None
 
         with col_b:
-            st.markdown("##### 📍 [수업 B] 맞교환 가능한 수업 (대강 교사 스케줄 검증 완료)")
+            st.markdown("##### 📍 [수업 B] 맞교환 가능한 수업 (충돌 검증 완료)")
             date_b = st.date_input("수업 B 날짜 선택", date(2026, 8, 10), key="d_b")
             day_b_kr = ["월", "화", "수", "목", "금", "토", "일"][date_b.weekday()]
             cls_df_b = parsed_df[(parsed_df["학급"] == selected_cls) & (parsed_df["요일"] == day_b_kr)].copy()
@@ -586,7 +698,6 @@ if parsed_df is not None and not parsed_df.empty:
                     if day_a_kr == day_b_kr and b_idx == idx_a: continue
                     r2_candidate = cls_df_b.loc[b_idx]
                     t2_clean = str(r2_candidate["교사"]).replace("(대강)", "").strip()
-                    
                     c1_conflict = parsed_df[(parsed_df["교사"] == t1_clean) & (parsed_df["요일"] == day_b_kr) & (parsed_df["교시"] == r2_candidate["교시"]) & (parsed_df["학급"] != selected_cls)]
                     c2_conflict = parsed_df[(parsed_df["교사"] == t2_clean) & (parsed_df["요일"] == day_a_kr) & (parsed_df["교시"] == r1["교시"]) & (parsed_df["학급"] != selected_cls)]
                     if c1_conflict.empty and c2_conflict.empty: valid_b_indices.append(b_idx)
@@ -604,21 +715,18 @@ if parsed_df is not None and not parsed_df.empty:
                     "cls1": selected_cls, "date1": str(date_a), "period1": int(r1["교시"]), "subj1": r1["과목"], "teacher1": str(r1["교사"]),
                     "cls2": selected_cls, "date2": str(date_b), "period2": int(r2["교시"]), "subj2": r2["과목"], "teacher2": str(r2["교사"])
                 }
-                save_swap_request(log_entry)
-                st.success("📩 수업 교체 요청이 등록되었습니다! (관리자가 승인하면 최종 반영됩니다)")
+                save_swap_request(log_entry, auto_approve=is_admin)
+                st.success("📩 수업 교체 요청이 등록/승인되었습니다!")
 
     if is_admin:
         with tab3:
             st.subheader("📝 스마트 대강 지정 및 사유 기록 (관리자 전용)")
             c_sub1, c_sub2 = st.columns(2)
-            
             with c_sub1:
                 st.markdown("##### 1️⃣ 대강 처리할 수업 지정")
                 sub_date = st.date_input("대강 날짜 선택", date(2026, 8, 10), key="s_date")
                 sub_day_kr = ["월", "화", "수", "목", "금", "토", "일"][sub_date.weekday()]
-                
                 sub_period = st.selectbox("교시 선택", list(range(1, 8)))
-                
                 target_classes_df = parsed_df[(parsed_df["요일"] == sub_day_kr) & (parsed_df["교시"] == sub_period)]
                 
                 if not target_classes_df.empty:
@@ -628,9 +736,7 @@ if parsed_df is not None and not parsed_df.empty:
                         format_func=lambda x: f"[{target_classes_df.loc[x, '학급']}] {target_classes_df.loc[x, '과목']} - 담당: {target_classes_df.loc[x, '교사']} 선생님"
                     )
                     selected_target = target_classes_df.loc[target_cls_idx]
-                    orig_teacher = selected_target["교사"]
-                    orig_cls = selected_target["학급"]
-                    orig_subj = selected_target["과목"]
+                    orig_teacher, orig_cls, orig_subj = selected_target["교사"], selected_target["학급"], selected_target["과목"]
                 else:
                     st.warning("선택한 날짜/교시에 등록된 수업 데이터가 없습니다.")
                     selected_target = None
@@ -644,22 +750,15 @@ if parsed_df is not None and not parsed_df.empty:
                     if available_teachers:
                         sub_teacher = st.selectbox("대강 교사 선택 (중복 수업 없는 교사 목록)", available_teachers)
                         sub_reason = st.text_input("대강 사유 (필수)", placeholder="예: 출장, 병가, 공결, 연가")
-                        
                         st.markdown("---")
                         if st.button("📝 대강 저장 및 시간표 반영", use_container_width=True):
                             if not sub_reason:
                                 st.error("대강 사유를 반드시 입력하셔야 합니다.")
                             else:
                                 log_entry = {
-                                    "날짜": str(sub_date),
-                                    "요일": sub_day_kr,
-                                    "교시": int(sub_period),
-                                    "학급": orig_cls,
-                                    "원교사": orig_teacher,
-                                    "대강교사": sub_teacher,
-                                    "대강사유": sub_reason,
-                                    "단가": st.session_state.hourly_rate,
-                                    "주차": st.session_state.week_offset
+                                    "날짜": str(sub_date), "요일": sub_day_kr, "교시": int(sub_period),
+                                    "학급": orig_cls, "원교사": orig_teacher, "대강교사": sub_teacher,
+                                    "대강사유": sub_reason, "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset
                                 }
                                 save_sub_log(log_entry)
                                 st.session_state.sub_logs = load_sub_logs()
@@ -671,7 +770,6 @@ if parsed_df is not None and not parsed_df.empty:
         with tab4:
             st.subheader("📊 교사별 주당 시수 & 기간별 대강일지 인쇄/출력 (관리자 전용)")
             c_s1, c_s2 = st.columns([1, 1.8])
-            
             with c_s1:
                 st.markdown("##### 📌 교사별 기본 주당 수업 시수")
                 tc = parsed_df["교사"].value_counts().reset_index()
@@ -680,41 +778,26 @@ if parsed_df is not None and not parsed_df.empty:
 
             with c_s2:
                 st.markdown("##### 📑 기간별 대강일지 검색 및 엑셀 다운로드")
-                
                 col_d1, col_d2 = st.columns(2)
-                with col_d1:
-                    start_filter = st.date_input("조회 시작일", date(2026, 8, 1))
-                with col_d2:
-                    end_filter = st.date_input("조회 종료일", date(2026, 8, 31))
+                with col_d1: start_filter = st.date_input("조회 시작일", date(2026, 8, 1))
+                with col_d2: end_filter = st.date_input("조회 종료일", date(2026, 8, 31))
                     
                 if len(st.session_state.sub_logs) > 0:
                     all_sub_df = pd.DataFrame(st.session_state.sub_logs)
                     all_sub_df["날짜_dt"] = pd.to_datetime(all_sub_df["날짜"]).dt.date
-                    
-                    filtered_sub = all_sub_df[
-                        (all_sub_df["날짜_dt"] >= start_filter) & (all_sub_df["날짜_dt"] <= end_filter)
-                    ].copy()
+                    filtered_sub = all_sub_df[(all_sub_df["날짜_dt"] >= start_filter) & (all_sub_df["날짜_dt"] <= end_filter)].copy()
                     
                     if not filtered_sub.empty:
                         filtered_sub["지급액"] = filtered_sub["단가"]
                         export_df = filtered_sub[["날짜", "요일", "교시", "학급", "원교사", "대강교사", "대강사유", "단가"]].rename(
-                            columns={
-                                "날짜": "일자", "요일": "요일", "교시": "교시", "학급": "대상학급",
-                                "원교사": "기존교사", "대강교사": "대강교사", "대강사유": "대강사유", "단가": "대강수당(원)"
-                            }
+                            columns={"날짜": "일자", "요일": "요일", "교시": "교시", "학급": "대상학급", "원교사": "기존교사", "대강교사": "대강교사", "대강사유": "대강사유", "단가": "대강수당(원)"}
                         )
-                        
                         st.dataframe(export_df, use_container_width=True)
-                        
                         csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
                         st.download_button(
                             label=f"📥 대강일지 ({start_filter} ~ {end_filter}) 엑셀(CSV) 다운로드",
-                            data=csv_data,
-                            file_name=f"{st.session_state.school_name}_대강일지_{start_filter}_~_{end_filter}.csv",
-                            mime="text/csv",
-                            use_container_width=True
+                            data=csv_data, file_name=f"{st.session_state.school_name}_대강일지_{start_filter}_~_{end_filter}.csv",
+                            mime="text/csv", use_container_width=True
                         )
-                    else:
-                        st.info("선택하신 기간 동안 지정된 대강 이력이 없습니다.")
-                else:
-                    st.info("등록된 대강 기록이 존재하지 않습니다.")
+                    else: st.info("선택하신 기간 동안 지정된 대강 이력이 없습니다.")
+                else: st.info("등록된 대강 기록이 존재하지 않습니다.")
