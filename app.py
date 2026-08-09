@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 설정
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# Custom CSS - 요일 칸 축소, 날짜 확대, 테두리선 굵기 완벽 통일
+# Custom CSS - 요일 배경/글자 완벽 고정 & 굵은 구분선 일괄 통일
 st.markdown("""
 <style>
     @media print {
@@ -33,7 +33,7 @@ st.markdown("""
         table-layout: fixed;
     }
     
-    /* 헤더 스타일 및 상단/반 간 굵은 구분선 */
+    /* 상단 헤더 */
     .unified-table th {
         background-color: #1e3a8a !important;
         color: #ffffff !important;
@@ -45,7 +45,7 @@ st.markdown("""
         border-right: 3.5px solid #0f172a !important;
     }
     
-    /* 일반 셀 및 반 세로 구분선 (동일한 굵은선 적용) */
+    /* 일반 셀 및 세로 굵은선 */
     .unified-table td {
         background-color: #ffffff !important;
         padding: 8px 2px;
@@ -57,27 +57,28 @@ st.markdown("""
         word-break: break-all;
     }
     
-    /* 요일 기둥 스타일 (폭 축소: 3.5%, 날짜 크기 확대, 배경/글씨색 강제 고정) */
-    .day-col {
-        background-color: #1e3a8a !important;
+    /* 요일 기둥 (배경 및 글자색 강제 고정) */
+    td.day-col {
+        background-color: #1e3a8a !important; /* 진한 파란색 배경 고정 */
         color: #ffffff !important;
         font-weight: 800 !important;
-        font-size: 16px !important;
-        width: 3.5% !important;
-        vertical-align: middle;
+        width: 4% !important;
+        vertical-align: middle !important;
         border-right: 3.5px solid #0f172a !important;
         padding: 4px 2px !important;
     }
     
     .day-col b {
-        color: #ffffff !important;
-        font-size: 17px !important;
+        color: #ffffff !important; /* 요일(월, 화) 글자 흰색 고정 */
+        font-size: 18px !important;
+        display: block !important;
     }
 
     .day-col span {
-        color: #e2e8f0 !important;
-        font-size: 13px !important; /* 날짜 글자 확대 */
+        color: #f1f5f9 !important; /* 날짜 글자 연한 회색/흰색 고정 */
+        font-size: 12px !important;
         font-weight: 700 !important;
+        display: block !important;
     }
 
     .period-col {
@@ -89,7 +90,7 @@ st.markdown("""
         border-right: 3.5px solid #0f172a !important;
     }
     
-    /* 과목/교사명 색상 반전 차단 */
+    /* 과목/교사명 */
     .subject-name { 
         font-size: 14px !important; 
         font-weight: 800 !important; 
@@ -110,8 +111,8 @@ st.markdown("""
     .badge-swap { background-color: #ca8a04 !important; color: white !important; }
     .badge-sub { background-color: #ea580c !important; color: white !important; }
     
-    /* 요일끼리 구분하는 동일한 굵은 가로선 */
-    .day-border-bottom td {
+    /* 요일끼리 구분하는 세로선과 동일한 굵은 가로선 */
+    tr.day-border-bottom td {
         border-bottom: 3.5px solid #0f172a !important;
     }
 </style>
@@ -421,19 +422,19 @@ def build_weekly_html_table(filtered_df, title_name):
     html += "</tbody></table></div>"
     return html
 
-# 표 생성 함수 (전체 시간표) - 요일 기둥 축소 및 날짜 글씨 확대 적용
+# 표 생성 함수 (전체 시간표)
 def build_merged_full_grid_html(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
     sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
     
-    html = "<div class='table-container'><table class='unified-table'><thead><tr><th style='width: 3.5%; color:white !important;'>요일</th><th style='width: 5%; color:white !important;'>교시</th>"
+    html = "<div class='table-container'><table class='unified-table'><thead><tr><th style='width: 4%; color:white !important;'>요일</th><th style='width: 5%; color:white !important;'>교시</th>"
     for c in classes: html += f"<th style='color:white !important;'>{c}</th>"
     html += "</tr></thead><tbody>"
     
     for d in days:
         date_str = current_week_dates[d].strftime("%Y-%m-%d")
-        day_label = f"<b>{d}</b><br><span>({current_week_dates[d].strftime('%m/%d')})</span>"
+        day_label = f"<b>{d}</b><span>({current_week_dates[d].strftime('%m/%d')})</span>"
         for p in range(1, 8):
             border_cls = "day-border-bottom" if p == 7 else ""
             html += f"<tr class='{border_cls}'>"
