@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 설정
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# Custom CSS - 요일 배경/글자 완벽 고정 & 굵은 구분선 일괄 통일
+# Custom CSS - 요일 칸 아래쪽 굵은선 보완 완료
 st.markdown("""
 <style>
     @media print {
@@ -57,25 +57,26 @@ st.markdown("""
         word-break: break-all;
     }
     
-    /* 요일 기둥 (배경 및 글자색 강제 고정) */
+    /* 요일 기둥 (오른쪽 + 아래쪽 모두 굵은선 적용) */
     td.day-col {
-        background-color: #1e3a8a !important; /* 진한 파란색 배경 고정 */
+        background-color: #1e3a8a !important;
         color: #ffffff !important;
         font-weight: 800 !important;
         width: 4% !important;
         vertical-align: middle !important;
         border-right: 3.5px solid #0f172a !important;
+        border-bottom: 3.5px solid #0f172a !important; /* 요일 칸 밑바닥 굵은선 */
         padding: 4px 2px !important;
     }
     
     .day-col b {
-        color: #ffffff !important; /* 요일(월, 화) 글자 흰색 고정 */
+        color: #ffffff !important;
         font-size: 18px !important;
         display: block !important;
     }
 
     .day-col span {
-        color: #f1f5f9 !important; /* 날짜 글자 연한 회색/흰색 고정 */
+        color: #f1f5f9 !important;
         font-size: 12px !important;
         font-weight: 700 !important;
         display: block !important;
@@ -111,7 +112,7 @@ st.markdown("""
     .badge-swap { background-color: #ca8a04 !important; color: white !important; }
     .badge-sub { background-color: #ea580c !important; color: white !important; }
     
-    /* 요일끼리 구분하는 세로선과 동일한 굵은 가로선 */
+    /* 요일 구분 7교시 밑 굵은 가로선 */
     tr.day-border-bottom td {
         border-bottom: 3.5px solid #0f172a !important;
     }
