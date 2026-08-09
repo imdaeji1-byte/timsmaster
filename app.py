@@ -22,7 +22,6 @@ st.markdown("""
         body { zoom: 80%; }
     }
     
-    /* 포스터 및 카드형 시간표 스타일 */
     .timetable-poster {
         width: 100%;
         border-collapse: collapse;
@@ -94,7 +93,6 @@ st.markdown("""
     .badge-swap { background-color: #ca8a04; color: white; }
     .badge-sub { background-color: #ea580c; color: white; }
     
-    /* 전체 시간표 가독성 대폭 향상 테이블 (구분선 굵기 차별화) */
     .grid-table {
         width: 100%;
         border-collapse: collapse;
@@ -114,14 +112,13 @@ st.markdown("""
         border-left: 1px solid #cbd5e1;
         border-bottom: 1px solid #e2e8f0;
     }
-    /* 요일별 경계선 굵게 (구분선 강화) */
     .day-border-bottom {
         border-bottom: 3.5px solid #1e3a8a !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 2. SQLite DB 연동
+# 2. SQLite DB 연동 (테이블 구조 스키마 자동 최신화)
 DB_FILE = "timemaster_data.db"
 
 def init_db():
@@ -141,14 +138,22 @@ def init_db():
             week_offset INTEGER
         )
     """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS swap_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cls1 TEXT, day1 TEXT, period1 INTEGER, subj1 TEXT, teacher1 TEXT,
-            cls2 TEXT, day2 TEXT, period2 INTEGER, subj2 TEXT, teacher2 TEXT,
-            week_offset INTEGER
-        )
-    """)
+    
+    # swap_logs 스키마 검증 및 재생성
+    c.execute("PRAGMA table_info(swap_logs)")
+    columns = [row[1] for row in c.fetchall()]
+    
+    if not columns or "cls1" not in columns:
+        c.execute("DROP TABLE IF EXISTS swap_logs")
+        c.execute("""
+            CREATE TABLE swap_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cls1 TEXT, day1 TEXT, period1 INTEGER, subj1 TEXT, teacher1 TEXT,
+                cls2 TEXT, day2 TEXT, period2 INTEGER, subj2 TEXT, teacher2 TEXT,
+                week_offset INTEGER
+            )
+        """)
+        
     conn.commit()
     conn.close()
 
@@ -185,15 +190,19 @@ def save_sub_log(log):
 
 def load_swap_logs():
     conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query("SELECT * FROM swap_logs", conn)
-    conn.close()
-    logs = []
-    for _, row in df.iterrows():
-        logs.append({
-            "cls1": row["cls1"], "day1": row["day1"], "period1": row["period1"], "subj1": row["subj1"], "teacher1": row["teacher1"],
-            "cls2": row["cls2"], "day2": row["day2"], "period2": row["period2"], "subj2": row["subj2"], "teacher2": row["teacher2"],
-            "주차": row["week_offset"]
-        })
+    try:
+        df = pd.read_sql_query("SELECT * FROM swap_logs", conn)
+        logs = []
+        for _, row in df.iterrows():
+            logs.append({
+                "cls1": row["cls1"], "day1": row["day1"], "period1": row["period1"], "subj1": row["subj1"], "teacher1": row["teacher1"],
+                "cls2": row["cls2"], "day2": row["day2"], "period2": row["period2"], "subj2": row["subj2"], "teacher2": row["teacher2"],
+                "주차": row["week_offset"]
+            })
+    except Exception:
+        logs = []
+    finally:
+        conn.close()
     return logs
 
 def save_swap_log(log):
@@ -301,7 +310,7 @@ if mode == "관리자 모드 (수업교체/대강)" and st.session_state.admin_a
 
 st.title(f"📅 {st.session_state.school_name} 시간표 관리 시스템")
 
-# 주차 정렬 레이아웃 (상단 중앙 집중)
+# 주차 정렬 레이아웃
 _, c_mid, _ = st.columns([1, 6, 1])
 with c_mid:
     col_b1, col_b2, col_b3, col_b4 = st.columns([1.2, 4, 1, 1.2])
@@ -320,7 +329,7 @@ with c_mid:
             st.session_state.week_offset += 1
             st.rerun()
 
-# 엑셀 정밀 파싱
+# 엑셀 파싱
 def parse_excel_timetable(df_in):
     if df_in is None:
         return None, []
@@ -381,7 +390,7 @@ def parse_excel_timetable(df_in):
 
 p_df, t_list = parse_excel_timetable(st.session_state.raw_df)
 
-# DB 내역 반영 함수
+# DB 내역 반영
 def apply_swaps_and_subs(base_df, week_offset):
     if base_df is None or base_df.empty:
         return base_df
@@ -456,7 +465,7 @@ def build_weekly_html_table(filtered_df, title_name):
     html += "</tbody></table>"
     return html
 
-# 요일 병합형 가독성 극대화 전체 시간표 생성 함수
+# 전체 시간표 생성 함수
 def build_merged_full_grid_html(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
@@ -476,7 +485,6 @@ def build_merged_full_grid_html(df_in):
             border_cls = "day-border-bottom" if p == 7 else ""
             html += f"<tr class='{border_cls}'>"
             
-            # 요일 칼럼 1교시에만 병합 생성
             if p == 1:
                 html += f"<td rowspan='7' class='day-col'>{day_label}</td>"
                 
@@ -540,13 +548,11 @@ if parsed_df is not None and not parsed_df.empty:
     with tab2:
         st.subheader("🔄 특정 학급 전용 수업 맞교환 (스마트 중복 방지)")
         
-        # 1. 학급 선택
         selected_cls = st.selectbox("🎯 대상 학급 선택", sorted(parsed_df["학급"].unique()))
         cls_df = parsed_df[parsed_df["학급"] == selected_cls]
 
         col_a, col_b = st.columns(2)
         
-        # 2. 수업 A 선택
         with col_a:
             st.markdown(f"##### 📍 [수업 A] 교체할 첫 번째 수업")
             idx_a = st.selectbox(
@@ -556,15 +562,12 @@ if parsed_df is not None and not parsed_df.empty:
             )
             r1 = cls_df.loc[idx_a]
 
-        # 3. 수업 B 스마트 필터링 (중복/충돌 없는 가능한 수업만 고르기)
-        # 조건: r1["교사"]가 B시간에 다른 학급 수업이 없고, r2["교사"]가 A시간에 다른 학급 수업이 없는 경우만 필터링
         valid_b_indices = []
         for b_idx in cls_df.index:
             if b_idx == idx_a:
                 continue
             r2 = cls_df.loc[b_idx]
             
-            # 충돌 검사
             c1_conflict = parsed_df[(parsed_df["교사"] == r1["교사"]) & (parsed_df["요일"] == r2["요일"]) & (parsed_df["교시"] == r2["교시"]) & (parsed_df["학급"] != selected_cls)]
             c2_conflict = parsed_df[(parsed_df["교사"] == r2["교사"]) & (parsed_df["요일"] == r1["요일"]) & (parsed_df["교시"] == r1["교시"]) & (parsed_df["학급"] != selected_cls)]
             
