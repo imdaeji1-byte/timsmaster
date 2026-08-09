@@ -73,14 +73,14 @@ st.markdown("""
     
     /* 다크모드 강제 폰트 색상 반전 방지 */
     .subject-name { 
-        font-size: 14px; 
-        font-weight: 800; 
+        font-size: 14px !important; 
+        font-weight: 800 !important; 
         color: #0f172a !important; 
         line-height: 1.2; 
     }
     .teacher-name { 
-        font-size: 12px; 
-        font-weight: 700; 
+        font-size: 12px !important; 
+        font-weight: 700 !important; 
         color: #334155 !important; 
         margin-top: 2px; 
     }
@@ -402,7 +402,7 @@ def build_weekly_html_table(filtered_df, title_name):
     html += "</tbody></table></div>"
     return html
 
-# 표 생성 함수 (전체 시간표)
+# 표 생성 함수 (전체 시간표) - subject-name 태그 완벽 연동 적용
 def build_merged_full_grid_html(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
@@ -426,13 +426,18 @@ def build_merged_full_grid_html(df_in):
                     row = cell_data.iloc[0]
                     subj, teacher, is_swapped = row["과목"], row["교사"], row.get("is_swapped", False)
                     sub_key = (date_str, c, p)
+                    
                     if sub_key in sub_dict:
-                        bg_color, txt = "#ffedd5", f"<span class='badge-sub status-badge'>대강</span><br><b>{subj}</b><br><b>({sub_dict[sub_key]['대강교사']})</b>"
+                        bg_class = "bg-substitute"
+                        txt = f"<span class='badge-sub status-badge'>대강</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({sub_dict[sub_key]['대강교사']})</div>"
                     elif is_swapped:
-                        bg_color, txt = "#fef08a", f"<span class='badge-swap status-badge'>교체</span><br><b>{subj}</b><br><b>({teacher})</b>"
+                        bg_class = "bg-swapped"
+                        txt = f"<span class='badge-swap status-badge'>교체</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
                     else:
-                        bg_color, txt = "#ffffff", f"<b>{subj}</b><br><span style='color:#334155; font-size:12px; font-weight:700;'>({teacher})</span>"
-                    html += f"<td style='background-color: {bg_color};'>{txt}</td>"
+                        bg_class = ""
+                        txt = f"<div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
+                    
+                    html += f"<td class='{bg_class}'>{txt}</td>"
                 else: html += "<td>-</td>"
             html += "</tr>"
     html += "</tbody></table></div>"
