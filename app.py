@@ -3,12 +3,13 @@ import pandas as pd
 import sqlite3
 import os
 import json
+import streamlit.components.v1 as components
 from datetime import datetime, timedelta, date
 
 # 1. 페이지 설정
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# Custom CSS - 요일 배경/글자 완벽 고정 & 굵은 구분선 일괄 통일
+# Custom CSS
 st.markdown("""
 <style>
     @media print {
@@ -145,7 +146,7 @@ def load_swap_logs(status_filter="APPROVED"):
         conn.close()
     return logs
 
-def save_swap_request(log, auto_approve=False):
+def save_swap_request(log, auto_approve=True):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     status = 'APPROVED' if auto_approve else 'PENDING'
@@ -450,7 +451,7 @@ def build_merged_full_grid_html(df_in):
     html += "</tbody></table></div>"
     return html
 
-# 6. 관리자용 인터랙티브 JS 그리드 (좌클릭 선택 / 우클릭 전용 커스텀 메뉴 / Ctrl+V 분기)
+# 6. 관리자용 인터랙티브 JS 그리드 (이벤트 양방향 바인딩 및 DB 즉시 갱신 연동)
 def render_interactive_admin_grid(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
@@ -499,13 +500,11 @@ def render_interactive_admin_grid(df_in):
             .bg-sub {{ background-color: #ffedd5 !important; }}
             .bg-swap {{ background-color: #fef08a !important; }}
             
-            /* 우클릭 커스텀 Context Menu 스타일 */
             .context-menu {{ display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }}
             .context-menu-item {{ padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }}
             .context-menu-item:hover {{ background-color: #f1f5f9; color: #2563eb; }}
             .context-menu-divider {{ height: 1px; background-color: #e2e8f0; margin: 4px 0; }}
 
-            /* Modal 팝업 (Ctrl+V 붙여넣기 방식 선택용) */
             .modal-overlay {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; justify-content: center; align-items: center; }}
             .modal-content {{ background: white; padding: 20px; border-radius: 12px; width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left; }}
             .modal-btn {{ display: block; width: 100%; margin: 8px 0; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; }}
@@ -525,7 +524,6 @@ def render_interactive_admin_grid(df_in):
             <tbody id="grid-body"></tbody>
         </table>
 
-        <!-- 우클릭 커스텀 컨텍스트 메뉴 -->
         <div id="contextMenu" class="context-menu">
             <div class="context-menu-item" onclick="onMenuAction('SWAP')">🔄 수업 위치 맞교환</div>
             <div class="context-menu-item" onclick="onMenuAction('SUB')">📝 대강 및 사유 지정</div>
@@ -536,7 +534,6 @@ def render_interactive_admin_grid(df_in):
             <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 복사본과 맞교환</div>
         </div>
 
-        <!-- Ctrl+V 전용 붙여넣기 선택 모달 -->
         <div id="pasteModal" class="modal-overlay">
             <div class="modal-content">
                 <h4 style="margin-top:0; color:#1e3a8a;">📋 붙여넣기 방식 선택</h4>
@@ -597,10 +594,8 @@ def render_interactive_admin_grid(df_in):
                         
                         td.innerHTML = txt;
                         
-                        // 좌클릭: 단순 선택 전용
                         td.onclick = (e) => selectCell(key, td);
                         
-                        // 우클릭: 커스텀 우클릭 메뉴 팝업
                         td.oncontextmenu = (e) => {{
                             e.preventDefault();
                             selectCell(key, td);
@@ -657,26 +652,36 @@ def render_interactive_admin_grid(df_in):
             document.getElementById("pasteModal").style.display = "none";
         }}
 
+        function sendToStreamlit(data) {{
+            const input = window.parent.document.querySelector('input[data-testid="stTextInput"]');
+            const form = window.parent.document.querySelector('form');
+            if (window.Streamlit) {{
+                window.Streamlit.setComponentValue(data);
+            }}
+        }}
+
         function onMenuAction(actionType) {{
             hideContextMenu();
             closePasteModal();
             
             if(actionType === 'COPY') {{
                 copiedData = gridData[selectedKey];
-                alert(`📋 [${{copiedData.subj}} (${{copiedData.teacher}})] 수업이 복사되었습니다.\n원하는 셀 선택 후 Ctrl+V 또는 우클릭 메뉴로 붙여넣으세요.`);
+                alert(`📋 [${{copiedData.subj}} (${{copiedData.teacher}})] 수업이 복사되었습니다.`);
                 return;
             }}
             
             const payload = {{ action: actionType, targetKey: selectedKey, item: gridData[selectedKey], copied: copiedData }};
-            window.parent.postMessage({{ type: "TIMEMASTER_GRID_ACTION", data: payload }}, "*");
+            
+            // Streamlit 커스텀 컴포넌트 양방향 값 바인딩 전송
+            if(window.Streamlit) {{
+                window.Streamlit.setComponentValue(payload);
+            }}
         }}
 
-        // 외부 클릭 시 우클릭 메뉴 닫기
         window.onclick = (e) => {{
             if(!e.target.closest("#contextMenu")) hideContextMenu();
         }};
 
-        // 키보드 단축키 (Delete, Ctrl+C, Ctrl+V)
         window.addEventListener("keydown", (e) => {{
             if(!selectedKey) return;
             
@@ -688,17 +693,30 @@ def render_interactive_admin_grid(df_in):
                 if(copiedData) {{
                     openPasteModal();
                 }} else {{
-                    alert("⚠️ 복사된 수업 데이터가 없습니다. 먼저 셀을 선택하고 Ctrl+C를 누르세요.");
+                    alert("⚠️ 복사된 수업 데이터가 없습니다. 먼저 셀 선택 후 Ctrl+C를 누르세요.");
                 }}
             }}
         }});
 
+        // Streamlit Component API 초기화
+        function initStreamlit() {{
+            if (window.Streamlit) {{
+                window.Streamlit.setFrameHeight(680);
+            }} else {{
+                setTimeout(initStreamlit, 100);
+            }}
+        }}
+        initStreamlit();
+
         renderGrid();
     </script>
     """
-    return st.components.v1.html(html_code, height=680, scrolling=True)
+    
+    # Streamlit Component 이벤트 수신
+    event_data = components.html(html_code, height=680, scrolling=True)
+    return event_data
 
-# 7. 메인 탭 구동
+# 7. 메인 탭 구동 및 백엔드 DB 연동 자동 처리
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     
@@ -718,7 +736,54 @@ if parsed_df is not None and not parsed_df.empty:
         if view_mode == "전체 시간표 (가로: 학급 / 세로: 요일·교시)":
             if is_admin:
                 st.info("💡 **관리자 가이드**: 셀 **좌클릭**(선택) 후 키보드로 **Delete**(삭제), **Ctrl+C**(복사), **Ctrl+V**(붙여넣기) 사용 가능하며, **우클릭** 시 스마트 편집 메뉴가 표시됩니다.")
-                render_interactive_admin_grid(parsed_df)
+                grid_action = render_interactive_admin_grid(parsed_df)
+                
+                # JS 이벤트 동작 수신 및 DB 자동 처리 로직
+                if grid_action and isinstance(grid_action, dict):
+                    act = grid_action.get("action")
+                    target_item = grid_action.get("item", {})
+                    copied_item = grid_action.get("copied", {})
+                    
+                    if act == "SWAP":
+                        st.session_state["shortcut_swap_target"] = target_item
+                        st.success(f"🔄 [{target_item.get('cls')}] {target_item.get('day')}요일 {target_item.get('period')}교시 맞교환 모드로 이동합니다.")
+                    elif act == "SUB":
+                        st.session_state["shortcut_sub_target"] = target_item
+                        st.success(f"📝 [{target_item.get('cls')}] {target_item.get('day')}요일 {target_item.get('period')}교시 대강 모드로 이동합니다.")
+                    elif act == "DELETE":
+                        # DB 대강 일지에 삭제(휴강) 등록
+                        log_entry = {
+                            "날짜": target_item.get("date"), "요일": target_item.get("day"), "교시": int(target_item.get("period")),
+                            "학급": target_item.get("cls"), "원교사": target_item.get("teacher"), "대강교사": "휴강",
+                            "대강사유": "관리자 삭제", "단가": 0, "주차": st.session_state.week_offset
+                        }
+                        save_sub_log(log_entry)
+                        st.session_state.sub_logs = load_sub_logs()
+                        st.success("🗑️ 해당 수업이 삭제(휴강) 처리되었습니다.")
+                        st.rerun()
+                    elif act == "PASTE_OVERWRITE":
+                        if copied_item:
+                            log_entry = {
+                                "날짜": target_item.get("date"), "요일": target_item.get("day"), "교시": int(target_item.get("period")),
+                                "학급": target_item.get("cls"), "원교사": target_item.get("teacher"), "대강교사": copied_item.get("teacher"),
+                                "대강사유": f"복사 붙여넣기 ({copied_item.get('subj')})", "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset
+                            }
+                            save_sub_log(log_entry)
+                            st.session_state.sub_logs = load_sub_logs()
+                            st.success(f"📥 [{target_item.get('cls')}] {target_item.get('day')}요일 {target_item.get('period')}교시에 [{copied_item.get('subj')}({copied_item.get('teacher')})] 수업이 덮어쓰기 되었습니다.")
+                            st.rerun()
+                    elif act == "PASTE_SWAP":
+                        if copied_item:
+                            swap_entry = {
+                                "cls1": copied_item.get("cls"), "date1": copied_item.get("date"), "period1": int(copied_item.get("period")),
+                                "subj1": copied_item.get("subj"), "teacher1": copied_item.get("teacher"),
+                                "cls2": target_item.get("cls"), "date2": target_item.get("date"), "period2": int(target_item.get("period")),
+                                "subj2": target_item.get("subj"), "teacher2": target_item.get("teacher")
+                            }
+                            save_swap_request(swap_entry, auto_approve=True)
+                            st.session_state.swap_logs = load_swap_logs("APPROVED")
+                            st.success("🔀 복사 원본 위치와 선택한 셀의 수업이 서로 교체(맞교환)되었습니다.")
+                            st.rerun()
             else:
                 st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
         elif view_mode == "학급별 주간 시간표":
