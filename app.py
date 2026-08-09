@@ -38,7 +38,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. SQLite DB 연동 (승인 요청 테이블 추가)
+# 2. SQLite DB 연동 (테이블 구조 자동 마이그레이션)
 DB_FILE = "timemaster_data.db"
 
 def init_db():
@@ -51,14 +51,20 @@ def init_db():
             o_teacher TEXT, s_teacher TEXT, reason TEXT, rate INTEGER, week_offset INTEGER
         )
     """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS swap_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cls1 TEXT, date1 TEXT, period1 INTEGER, subj1 TEXT, teacher1 TEXT,
-            cls2 TEXT, date2 TEXT, period2 INTEGER, subj2 TEXT, teacher2 TEXT,
-            status TEXT
-        )
-    """)
+    
+    # DB 스키마 자동 재구성 (오류 방지)
+    c.execute("PRAGMA table_info(swap_logs)")
+    cols = [row[1] for row in c.fetchall()]
+    if "date1" not in cols:
+        c.execute("DROP TABLE IF EXISTS swap_logs")
+        c.execute("""
+            CREATE TABLE swap_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cls1 TEXT, date1 TEXT, period1 INTEGER, subj1 TEXT, teacher1 TEXT,
+                cls2 TEXT, date2 TEXT, period2 INTEGER, subj2 TEXT, teacher2 TEXT,
+                status TEXT
+            )
+        """)
     conn.commit()
     conn.close()
 
@@ -124,7 +130,7 @@ def clear_all_db():
     conn.commit()
     conn.close()
 
-# 3. 세션 초기화 및 오늘 날짜 기준 계산
+# 3. 세션 초기화 및 오늘 날짜 고정 (2026-08-10 주간 자동 반영)
 if "school_name" not in st.session_state:
     st.session_state.school_name = "경남해양고등학교"
 if "hourly_rate" not in st.session_state:
@@ -139,10 +145,11 @@ if "admin_authenticated" not in st.session_state:
 st.session_state.sub_logs = load_sub_logs()
 st.session_state.swap_logs = load_swap_logs("APPROVED")
 
-# 오늘 날짜 기반 주차 자동 계산
+# 주차 날짜 정확 계산 (2026-08-10 월요일 기준)
 def get_week_dates(offset=0):
-    today = date.today() + timedelta(weeks=offset)
-    start_of_week = today - timedelta(days=today.weekday())
+    base_date = date(2026, 8, 10) # 8월 10일 월요일 고정 기준
+    target_date = base_date + timedelta(weeks=offset)
+    start_of_week = target_date - timedelta(days=target_date.weekday())
     return {
         "월": start_of_week,
         "화": start_of_week + timedelta(days=1),
@@ -273,7 +280,7 @@ def parse_excel_timetable(df_in):
 
 p_df, t_list = parse_excel_timetable(st.session_state.raw_df)
 
-# 승인된 맞교환 내역을 날짜 기반으로 반영
+# 승인된 맞교환 내역을 반영
 def apply_swaps_and_subs(base_df, current_week_dates):
     if base_df is None or base_df.empty: return base_df
     df = base_df.copy()
@@ -283,8 +290,6 @@ def apply_swaps_and_subs(base_df, current_week_dates):
     
     for swap in st.session_state.swap_logs:
         d1_str, d2_str = swap["date1"], swap["date2"]
-        
-        # 현재 주차에 포함되는 날짜인지 검사
         if d1_str in date_to_day and d2_str in date_to_day:
             day1, day2 = date_to_day[d1_str], date_to_day[d2_str]
             m1 = (df["학급"] == swap["cls1"]) & (df["요일"] == day1) & (df["교시"] == swap["period1"])
@@ -304,7 +309,7 @@ def apply_swaps_and_subs(base_df, current_week_dates):
 parsed_df = apply_swaps_and_subs(p_df, current_week_dates)
 teacher_list = t_list
 
-# 시간표 뷰어 함수들
+# 표 생성 함수
 def build_weekly_html_table(filtered_df, title_name):
     days = ["월", "화", "수", "목", "금"]
     periods = list(range(1, 8))
@@ -393,12 +398,16 @@ if parsed_df is not None and not parsed_df.empty:
     with tab2:
         st.subheader("🔄 날짜 지정 기반 수업 맞교환 신청 (승인 요청제)")
         
-        # 관리자 승인 대기 목록 관리자 모드에 표시
+        # 관리자 승인 대기 목록
         if mode == "관리자 모드 (수업교체/대강)" and st.session_state.admin_authenticated:
             st.markdown("### 📥 [관리자] 대기 중인 수업 교체 요청 목록")
             conn = sqlite3.connect(DB_FILE)
-            pending_df = pd.read_sql_query("SELECT * FROM swap_logs WHERE status = 'PENDING'", conn)
-            conn.close()
+            try:
+                pending_df = pd.read_sql_query("SELECT * FROM swap_logs WHERE status = 'PENDING'", conn)
+            except Exception:
+                pending_df = pd.DataFrame()
+            finally:
+                conn.close()
             
             if not pending_df.empty:
                 for _, p_row in pending_df.iterrows():
@@ -420,7 +429,7 @@ if parsed_df is not None and not parsed_df.empty:
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown("##### 📍 [수업 A] 첫 번째 수업 지정")
-            date_a = st.date_input("수업 A 날짜 선택", date.today(), key="d_a")
+            date_a = st.date_input("수업 A 날짜 선택", date(2026, 8, 10), key="d_a")
             day_a_kr = ["월", "화", "수", "목", "금", "토", "일"][date_a.weekday()]
             cls_df_a = parsed_df[(parsed_df["학급"] == selected_cls) & (parsed_df["요일"] == day_a_kr)]
             
@@ -428,20 +437,34 @@ if parsed_df is not None and not parsed_df.empty:
                 idx_a = st.selectbox("수업 A 선택", cls_df_a.index, format_func=lambda x: f"{cls_df_a.loc[x, '교시']}교시 - {cls_df_a.loc[x, '과목']}({cls_df_a.loc[x, '교사']})")
                 r1 = cls_df_a.loc[idx_a]
             else:
-                st.warning("선택한 날짜에 해당하는 시간표 데이터가 없습니다.")
+                st.warning("선택한 날짜에 해당하는 수업이 없습니다.")
                 r1 = None
 
         with col_b:
-            st.markdown("##### 📍 [수업 B] 맞교환할 두 번째 수업 지정")
-            date_b = st.date_input("수업 B 날짜 선택", date.today() + timedelta(days=1), key="d_b")
+            st.markdown("##### 📍 [수업 B] 맞교환 가능한 수업 (충돌 검증 완료)")
+            date_b = st.date_input("수업 B 날짜 선택", date(2026, 8, 10), key="d_b")
             day_b_kr = ["월", "화", "수", "목", "금", "토", "일"][date_b.weekday()]
             cls_df_b = parsed_df[(parsed_df["학급"] == selected_cls) & (parsed_df["요일"] == day_b_kr)]
             
-            if not cls_df_b.empty:
-                idx_b = st.selectbox("수업 B 선택", cls_df_b.index, format_func=lambda x: f"{cls_df_b.loc[x, '교시']}교시 - {cls_df_b.loc[x, '과목']}({cls_df_b.loc[x, '교사']})")
+            # 교체 가능 수업 스마트 필터링 (충돌 방지)
+            valid_b_indices = []
+            if r1 is not None and not cls_df_b.empty:
+                for b_idx in cls_df_b.index:
+                    if day_a_kr == day_b_kr and b_idx == idx_a:
+                        continue
+                    r2_candidate = cls_df_b.loc[b_idx]
+                    
+                    c1_conflict = parsed_df[(parsed_df["교사"] == r1["교사"]) & (parsed_df["요일"] == day_b_kr) & (parsed_df["교시"] == r2_candidate["교시"]) & (parsed_df["학급"] != selected_cls)]
+                    c2_conflict = parsed_df[(parsed_df["교사"] == r2_candidate["교사"]) & (parsed_df["요일"] == day_a_kr) & (parsed_df["교시"] == r1["교시"]) & (parsed_df["학급"] != selected_cls)]
+                    
+                    if c1_conflict.empty and c2_conflict.empty:
+                        valid_b_indices.append(b_idx)
+
+            if valid_b_indices:
+                idx_b = st.selectbox("수업 B 선택 (시수 충돌 없는 수업 목록)", valid_b_indices, format_func=lambda x: f"{cls_df_b.loc[x, '교시']}교시 - {cls_df_b.loc[x, '과목']}({cls_df_b.loc[x, '교사']})")
                 r2 = cls_df_b.loc[idx_b]
             else:
-                st.warning("선택한 날짜에 해당하는 시간표 데이터가 없습니다.")
+                st.warning("⚠️ 선택하신 조건에서 충돌 없는 수업 B 후보가 없습니다.")
                 r2 = None
 
         if r1 is not None and r2 is not None:
