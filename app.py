@@ -22,10 +22,10 @@ st.markdown("""
     }
     .timetable-poster th { background-color: #1e3a8a; color: #ffffff; padding: 12px; font-size: 16px; font-weight: bold; border: 1px solid #1e3a8a; }
     .timetable-poster td { border: 1px solid #cbd5e1; padding: 10px 6px; height: 65px; vertical-align: middle; }
-    .period-col { background-color: #f1f5f9; font-weight: bold; color: #1e293b; width: 7% !important; font-size: 15px; }
-    .day-col { background-color: #1e3a8a; color: #ffffff; font-weight: 800; font-size: 18px; width: 8% !important; vertical-align: middle; border-right: 2px solid #0f172a !important; }
+    .period-col { background-color: #f1f5f9; font-weight: bold; color: #1e293b; width: 5% !important; font-size: 15px; }
+    .day-col { background-color: #1e3a8a; color: #ffffff; font-weight: 800; font-size: 16px; width: 5% !important; vertical-align: middle; border-right: 2px solid #0f172a !important; }
     .subject-name { font-size: 15px; font-weight: 800; color: #0f172a; line-height: 1.2; }
-    .teacher-name { font-size: 13px; font-weight: 600; color: #475569; margin-top: 4px; }
+    .teacher-name { font-size: 14px; font-weight: 700; color: #1e293b; margin-top: 4px; }
     .bg-swapped { background-color: #fef08a !important; border: 2px solid #eab308 !important; }
     .bg-substitute { background-color: #ffedd5 !important; border: 2px solid #f97316 !important; }
     .status-badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold; display: inline-block; margin-bottom: 3px; }
@@ -34,11 +34,12 @@ st.markdown("""
     .grid-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 14px; }
     .grid-table th { background-color: #1e3a8a; color: white; padding: 10px; font-weight: bold; border: 1px solid #1e3a8a; }
     .grid-table td { padding: 8px 4px; border-right: 1px solid #cbd5e1; border-left: 1px solid #cbd5e1; border-bottom: 1px solid #e2e8f0; }
-    .day-border-bottom { border-bottom: 3.5px solid #1e3a8a !important; }
+    /* 요일별 명확한 굵은 구분선 */
+    .day-border-bottom { border-bottom: 4px solid #1e3a8a !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# 2. SQLite DB 연동 (테이블 구조 자동 마이그레이션)
+# 2. SQLite DB 연동
 DB_FILE = "timemaster_data.db"
 
 def init_db():
@@ -51,8 +52,6 @@ def init_db():
             o_teacher TEXT, s_teacher TEXT, reason TEXT, rate INTEGER, week_offset INTEGER
         )
     """)
-    
-    # DB 스키마 자동 재구성 (오류 방지)
     c.execute("PRAGMA table_info(swap_logs)")
     cols = [row[1] for row in c.fetchall()]
     if "date1" not in cols:
@@ -130,7 +129,7 @@ def clear_all_db():
     conn.commit()
     conn.close()
 
-# 3. 세션 초기화 및 오늘 날짜 고정 (2026-08-10 주간 자동 반영)
+# 3. 세션 초기화
 if "school_name" not in st.session_state:
     st.session_state.school_name = "경남해양고등학교"
 if "hourly_rate" not in st.session_state:
@@ -145,9 +144,9 @@ if "admin_authenticated" not in st.session_state:
 st.session_state.sub_logs = load_sub_logs()
 st.session_state.swap_logs = load_swap_logs("APPROVED")
 
-# 주차 날짜 정확 계산 (2026-08-10 월요일 기준)
+# 주차 날짜 계산 (2026-08-10 월요일 기준)
 def get_week_dates(offset=0):
-    base_date = date(2026, 8, 10) # 8월 10일 월요일 고정 기준
+    base_date = date(2026, 8, 10)
     target_date = base_date + timedelta(weeks=offset)
     start_of_week = target_date - timedelta(days=target_date.weekday())
     return {
@@ -216,16 +215,16 @@ if mode == "관리자 모드 (수업교체/대강)" and st.session_state.admin_a
 
 st.title(f"📅 {st.session_state.school_name} 시간표 관리 시스템")
 
-# 주차 이동 상단 레이아웃
-_, c_mid, _ = st.columns([1, 6, 1])
+# 상단 촘촘한 중앙 몰림 주차 컨트롤 레이아웃
+_, c_mid, _ = st.columns([2, 5, 2])
 with c_mid:
-    col_b1, col_b2, col_b3, col_b4 = st.columns([1.2, 4, 1, 1.2])
+    col_b1, col_b2, col_b3, col_b4 = st.columns([1, 2.8, 0.9, 1])
     with col_b1:
         if st.button("◀ 이전주", use_container_width=True):
             st.session_state.week_offset -= 1
             st.rerun()
     with col_b2:
-        st.markdown(f"<h4 style='text-align: center; color: #1e3a8a; margin: 0;'>📆 [{mon_str} ~ {fri_str}] 시간표</h4>", unsafe_allow_html=True)
+        st.markdown(f"<h4 style='text-align: center; color: #1e3a8a; margin: 0; white-space: nowrap;'>📆 [{mon_str} ~ {fri_str}] 시간표</h4>", unsafe_allow_html=True)
     with col_b3:
         if st.button("이번주", use_container_width=True):
             st.session_state.week_offset = 0
@@ -280,7 +279,7 @@ def parse_excel_timetable(df_in):
 
 p_df, t_list = parse_excel_timetable(st.session_state.raw_df)
 
-# 승인된 맞교환 내역을 반영
+# 승인된 맞교환 내역 반영
 def apply_swaps_and_subs(base_df, current_week_dates):
     if base_df is None or base_df.empty: return base_df
     df = base_df.copy()
@@ -346,12 +345,12 @@ def build_merged_full_grid_html(df_in):
     classes = sorted(df_in["학급"].unique())
     sub_dict = { (log["학급"], log["요일"], int(str(log["교시"]).replace("교시","")), log["주차"]): log for log in st.session_state.sub_logs }
     
-    html = "<table class='grid-table'><thead><tr><th style='width: 7%;'>요일</th><th style='width: 6%;'>교시</th>"
+    html = "<table class='grid-table'><thead><tr><th style='width: 5%;'>요일</th><th style='width: 5%;'>교시</th>"
     for c in classes: html += f"<th>{c}</th>"
     html += "</tr></thead><tbody>"
     
     for d in days:
-        day_label = f"<b>{d}요일</b><br><span style='font-size:12px; font-weight:normal;'>({current_week_dates[d].strftime('%m/%d')})</span>"
+        day_label = f"<b>{d}</b><br><span style='font-size:11px; font-weight:normal;'>({current_week_dates[d].strftime('%m/%d')})</span>"
         for p in range(1, 8):
             border_cls = "day-border-bottom" if p == 7 else ""
             html += f"<tr class='{border_cls}'>"
@@ -364,11 +363,11 @@ def build_merged_full_grid_html(df_in):
                     subj, teacher, is_swapped = row["과목"], row["교사"], row.get("is_swapped", False)
                     sub_key = (c, d, p, st.session_state.week_offset)
                     if sub_key in sub_dict:
-                        bg_color, txt = "#ffedd5", f"<span class='badge-sub status-badge'>대강</span><br><b>{subj}</b><br>({sub_dict[sub_key]['대강교사']})"
+                        bg_color, txt = "#ffedd5", f"<span class='badge-sub status-badge'>대강</span><br><b>{subj}</b><br><b>({sub_dict[sub_key]['대강교사']})</b>"
                     elif is_swapped:
-                        bg_color, txt = "#fef08a", f"<span class='badge-swap status-badge'>교체</span><br><b>{subj}</b><br>({teacher})"
+                        bg_color, txt = "#fef08a", f"<span class='badge-swap status-badge'>교체</span><br><b>{subj}</b><br><b>({teacher})</b>"
                     else:
-                        bg_color, txt = "#ffffff", f"<b>{subj}</b><br><span style='color:#475569; font-size:12px;'>({teacher})</span>"
+                        bg_color, txt = "#ffffff", f"<b>{subj}</b><br><span style='color:#1e293b; font-size:14px; font-weight:700;'>({teacher})</span>"
                     html += f"<td style='background-color: {bg_color};'>{txt}</td>"
                 else: html += "<td>-</td>"
             html += "</tr>"
@@ -398,7 +397,6 @@ if parsed_df is not None and not parsed_df.empty:
     with tab2:
         st.subheader("🔄 날짜 지정 기반 수업 맞교환 신청 (승인 요청제)")
         
-        # 관리자 승인 대기 목록
         if mode == "관리자 모드 (수업교체/대강)" and st.session_state.admin_authenticated:
             st.markdown("### 📥 [관리자] 대기 중인 수업 교체 요청 목록")
             conn = sqlite3.connect(DB_FILE)
@@ -423,7 +421,6 @@ if parsed_df is not None and not parsed_df.empty:
                 st.success("현재 대기 중인 교체 요청이 없습니다.")
             st.markdown("---")
 
-        # 일반 신청 UI
         selected_cls = st.selectbox("🎯 대상 학급 선택", sorted(parsed_df["학급"].unique()))
         
         col_a, col_b = st.columns(2)
@@ -446,7 +443,6 @@ if parsed_df is not None and not parsed_df.empty:
             day_b_kr = ["월", "화", "수", "목", "금", "토", "일"][date_b.weekday()]
             cls_df_b = parsed_df[(parsed_df["학급"] == selected_cls) & (parsed_df["요일"] == day_b_kr)]
             
-            # 교체 가능 수업 스마트 필터링 (충돌 방지)
             valid_b_indices = []
             if r1 is not None and not cls_df_b.empty:
                 for b_idx in cls_df_b.index:
