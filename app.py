@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 설정
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# Custom CSS
+# Custom CSS - 요일 배경/글자 완벽 고정 & 굵은 구분선 일괄 통일
 st.markdown("""
 <style>
     @media print {
@@ -183,8 +183,6 @@ if "raw_df" not in st.session_state:
     st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
-if "js_click_event" not in st.session_state:
-    st.session_state.js_click_event = None
 
 st.session_state.sub_logs = load_sub_logs()
 st.session_state.swap_logs = load_swap_logs("APPROVED")
@@ -352,7 +350,7 @@ def apply_swaps_and_subs(base_df, current_week_dates):
 parsed_df = apply_swaps_and_subs(p_df, current_week_dates)
 teacher_list = t_list
 
-# 일반 학급/교사별 주간 시간표 HTML 생성
+# 일반 주간 시간표 HTML 생성
 def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]
     periods = list(range(1, 8))
@@ -411,13 +409,53 @@ def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     html += "</tbody></table></div>"
     return html
 
-# 6. 관리자용 인터랙티브 JS 그리드 컴포넌트 생성 함수 (좌클릭, Delete, Ctrl+C/V 이벤트 감지)
+# 일반 전체 시간표 HTML 생성
+def build_merged_full_grid_html(df_in):
+    days = ["월", "화", "수", "목", "금"]
+    classes = sorted(df_in["학급"].unique())
+    sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
+    
+    html = "<div class='table-container'><table class='unified-table'><thead><tr><th style='width: 4%; color:white !important;'>요일</th><th style='width: 5%; color:white !important;'>교시</th>"
+    for c in classes: html += f"<th style='color:white !important;'>{c}</th>"
+    html += "</tr></thead><tbody>"
+    
+    for d in days:
+        date_str = current_week_dates[d].strftime("%Y-%m-%d")
+        day_label = f"<b>{d}</b><span>({current_week_dates[d].strftime('%m/%d')})</span>"
+        for p in range(1, 8):
+            border_cls = "day-border-bottom" if p == 7 else ""
+            html += f"<tr class='{border_cls}'>"
+            if p == 1: html += f"<td rowspan='7' class='day-col'>{day_label}</td>"
+            html += f"<td class='period-col'>{p}교시</td>"
+            for c in classes:
+                cell_data = df_in[(df_in["학급"] == c) & (df_in["요일"] == d) & (df_in["교시"] == p)]
+                if not cell_data.empty:
+                    row = cell_data.iloc[0]
+                    subj, teacher, is_swapped = row["과목"], row["교사"], row.get("is_swapped", False)
+                    sub_key = (date_str, c, p)
+                    
+                    if sub_key in sub_dict:
+                        bg_class = "bg-substitute"
+                        txt = f"<span class='badge-sub status-badge'>대강</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({sub_dict[sub_key]['대강교사']})</div>"
+                    elif is_swapped:
+                        bg_class = "bg-swapped"
+                        txt = f"<span class='badge-swap status-badge'>교체</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
+                    else:
+                        bg_class = ""
+                        txt = f"<div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
+                    
+                    html += f"<td class='{bg_class}'>{txt}</td>"
+                else: html += "<td>-</td>"
+            html += "</tr>"
+    html += "</tbody></table></div>"
+    return html
+
+# 6. 관리자용 인터랙티브 JS 그리드 컴포넌트 생성 함수 (JSON 직렬화 오류 보완 완료)
 def render_interactive_admin_grid(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
     sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
     
-    # 시간표 JSON 구조 생성
     grid_data = {}
     for d in days:
         date_str = current_week_dates[d].strftime("%Y-%m-%d")
@@ -427,17 +465,20 @@ def render_interactive_admin_grid(df_in):
                 key = f"{date_str}_{c}_{p}"
                 if not cell_data.empty:
                     row = cell_data.iloc[0]
-                    subj, teacher, is_swapped = row["과목"], row["교사"], row.get("is_swapped", False)
+                    subj, teacher = str(row["과목"]), str(row["교사"])
+                    is_swapped = bool(row.get("is_swapped", False))
                     sub_key = (date_str, c, p)
-                    sub_teacher = sub_dict[sub_key]['대강교사'] if sub_key in sub_dict else ""
+                    is_sub = sub_key in sub_dict
+                    sub_teacher = str(sub_dict[sub_key]['대강교사']) if is_sub else ""
+                    
                     grid_data[key] = {
-                        "date": date_str, "day": d, "cls": c, "period": p,
+                        "date": str(date_str), "day": str(d), "cls": str(c), "period": int(p),
                         "subj": subj, "teacher": teacher, "sub_teacher": sub_teacher,
-                        "is_swapped": is_swapped, "is_sub": sub_key in sub_dict
+                        "is_swapped": is_swapped, "is_sub": is_sub
                     }
                 else:
                     grid_data[key] = {
-                        "date": date_str, "day": d, "cls": c, "period": p,
+                        "date": str(date_str), "day": str(d), "cls": str(c), "period": int(p),
                         "subj": "", "teacher": "", "sub_teacher": "",
                         "is_swapped": False, "is_sub": False
                     }
@@ -445,7 +486,6 @@ def render_interactive_admin_grid(df_in):
     js_grid_json = json.dumps(grid_data, ensure_ascii=False)
     classes_json = json.dumps(classes, ensure_ascii=False)
     
-    # HTML / JS 커스텀 컴포넌트
     html_code = f"""
     <div id="grid-app">
         <style>
@@ -459,7 +499,6 @@ def render_interactive_admin_grid(df_in):
             .bg-sub {{ background-color: #ffedd5 !important; }}
             .bg-swap {{ background-color: #fef08a !important; }}
             
-            /* Modal 팝업 스타일 */
             .modal-overlay {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }}
             .modal-content {{ background: white; padding: 20px; border-radius: 12px; width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left; }}
             .modal-btn {{ display: block; width: 100%; margin: 8px 0; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; }}
@@ -480,7 +519,6 @@ def render_interactive_admin_grid(df_in):
             <tbody id="grid-body"></tbody>
         </table>
 
-        <!-- 모달 팝업 창 -->
         <div id="cellModal" class="modal-overlay">
             <div class="modal-content">
                 <h4 id="modalTitle" style="margin-top:0; color:#1e3a8a;">📌 수업 편집 모드</h4>
@@ -584,10 +622,8 @@ def render_interactive_admin_grid(df_in):
             window.parent.postMessage({{ type: "TIMEMASTER_GRID_ACTION", data: payload }}, "*");
         }}
 
-        // 키보드 이벤 수신 (Delete, Ctrl+C, Ctrl+V)
         window.addEventListener("keydown", (e) => {{
             if(!selectedKey) return;
-            
             if(e.key === "Delete" || e.key === "Backspace") {{
                 triggerAction("DELETE", selectedKey);
             }} else if(e.ctrlKey && e.key === "c") {{
@@ -617,17 +653,17 @@ if parsed_df is not None and not parsed_df.empty:
     with tab1:
         c_v1, c_v2 = st.columns([3, 1])
         with c_v1:
-            view_mode = st.radio("조회 방식", ["전체 시간표 (스마트 인터랙티브)", "학급별 주간 시간표", "교사별 주간 시간표"], horizontal=True)
+            view_mode = st.radio("조회 방식", ["전체 시간표 (가로: 학급 / 세로: 요일·교시)", "학급별 주간 시간표", "교사별 주간 시간표"], horizontal=True)
         with c_v2:
             st.write("")
             st.button("🖨️ 시간표 인쇄 / PDF 저장", on_click=lambda: st.components.v1.html("<script>window.print();</script>"))
 
-        if view_mode == "전체 시간표 (스마트 인터랙티브)":
+        if view_mode == "전체 시간표 (가로: 학급 / 세로: 요일·교시)":
             if is_admin:
                 st.info("💡 **관리자 가이드**: 셀 클릭 시 모달 팝업([교체]/[대강]/[삭제])이 뜨며, PC 키보드로 **Delete(삭제)**, **Ctrl+C(복사)**, **Ctrl+V(붙여넣기)**가 가능합니다.")
                 render_interactive_admin_grid(parsed_df)
             else:
-                st.markdown(build_weekly_html_table(parsed_df, "전체", filter_type="CLASS"), unsafe_allow_html=True)
+                st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
         elif view_mode == "학급별 주간 시간표":
             target_cls = st.selectbox("🎯 학급 선택", sorted(parsed_df["학급"].unique()))
             st.markdown(build_weekly_html_table(parsed_df, target_cls, filter_type="CLASS"), unsafe_allow_html=True)
