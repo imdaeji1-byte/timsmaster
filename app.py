@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import os
-import json
-import streamlit.components.v1 as components
 from datetime import datetime, timedelta, date
 
 # 1. 페이지 설정
@@ -184,6 +182,8 @@ if "raw_df" not in st.session_state:
     st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
+if "copied_cell" not in st.session_state:
+    st.session_state.copied_cell = None
 
 st.session_state.sub_logs = load_sub_logs()
 st.session_state.swap_logs = load_swap_logs("APPROVED")
@@ -204,57 +204,6 @@ def get_week_dates(offset=0):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str = current_week_dates["월"].strftime("%Y-%m-%d")
 fri_str = current_week_dates["금"].strftime("%Y-%m-%d")
-
-# URL 파라미터를 통한 JS 액션 수신 및 DB 자동 연동
-query_params = st.query_params
-if "action" in query_params:
-    act = query_params.get("action")
-    t_date = query_params.get("date", "")
-    t_cls = query_params.get("cls", "")
-    t_period = int(query_params.get("period", 1))
-    t_subj = query_params.get("subj", "")
-    t_teacher = query_params.get("teacher", "")
-    
-    c_date = query_params.get("c_date", "")
-    c_cls = query_params.get("c_cls", "")
-    c_period = int(query_params.get("c_period", 1)) if query_params.get("c_period") else 1
-    c_subj = query_params.get("c_subj", "")
-    c_teacher = query_params.get("c_teacher", "")
-    
-    # 쿼리 파라미터 청소 (중복 실행 방지)
-    st.query_params.clear()
-
-    if act == "DELETE":
-        log_entry = {
-            "날짜": t_date, "요일": ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()], "교시": t_period,
-            "학급": t_cls, "원교사": t_teacher, "대강교사": "휴강", "대강사유": "관리자 삭제",
-            "단가": 0, "주차": st.session_state.week_offset
-        }
-        save_sub_log(log_entry)
-        st.session_state.sub_logs = load_sub_logs()
-        st.success(f"🗑️ [{t_cls}] {t_period}교시 수업이 삭제(휴강) 처리되었습니다.")
-        st.rerun()
-
-    elif act == "PASTE_OVERWRITE":
-        log_entry = {
-            "날짜": t_date, "요일": ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()], "교시": t_period,
-            "학급": t_cls, "원교사": t_teacher, "대강교사": c_teacher, "대강사유": f"복사 붙여넣기({c_subj})",
-            "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset
-        }
-        save_sub_log(log_entry)
-        st.session_state.sub_logs = load_sub_logs()
-        st.success(f"📥 [{t_cls}] {t_period}교시에 [{c_subj}({c_teacher})] 수업이 덮어쓰기 되었습니다.")
-        st.rerun()
-
-    elif act == "PASTE_SWAP":
-        swap_entry = {
-            "cls1": c_cls, "date1": c_date, "period1": c_period, "subj1": c_subj, "teacher1": c_teacher,
-            "cls2": t_cls, "date2": t_date, "period2": t_period, "subj2": t_subj, "teacher2": t_teacher
-        }
-        save_swap_request(swap_entry, auto_approve=True)
-        st.session_state.swap_logs = load_swap_logs("APPROVED")
-        st.success(f"🔀 [{c_cls}] {c_period}교시와 [{t_cls}] {t_period}교시 수업이 서로 교체되었습니다.")
-        st.rerun()
 
 # 4. 사이드바
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
@@ -305,6 +254,7 @@ if mode == "관리자 모드 (수업교체/대강)" and st.session_state.admin_a
             clear_all_db()
             st.session_state.sub_logs = []
             st.session_state.swap_logs = []
+            st.session_state.copied_cell = None
             st.success("모든 변경 이력이 초기화되었습니다.")
             st.rerun()
 
@@ -402,7 +352,7 @@ def apply_swaps_and_subs(base_df, current_week_dates):
 parsed_df = apply_swaps_and_subs(p_df, current_week_dates)
 teacher_list = t_list
 
-# 일반 주간 시간표 HTML 생성
+# 주간 시간표 HTML 생성
 def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]
     periods = list(range(1, 8))
@@ -461,7 +411,7 @@ def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     html += "</tbody></table></div>"
     return html
 
-# 일반 전체 시간표 HTML 생성
+# 전체 시간표 HTML 생성
 def build_merged_full_grid_html(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
@@ -502,257 +452,12 @@ def build_merged_full_grid_html(df_in):
     html += "</tbody></table></div>"
     return html
 
-# 6. 관리자용 인터랙티브 JS 그리드 (Query Parameter 전달 동기화 구현)
-def render_interactive_admin_grid(df_in):
-    days = ["월", "화", "수", "목", "금"]
-    classes = sorted(df_in["학급"].unique())
-    sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
-    
-    grid_data = {}
-    for d in days:
-        date_str = current_week_dates[d].strftime("%Y-%m-%d")
-        for p in range(1, 8):
-            for c in classes:
-                cell_data = df_in[(df_in["학급"] == c) & (df_in["요일"] == d) & (df_in["교시"] == p)]
-                key = f"{date_str}_{c}_{p}"
-                if not cell_data.empty:
-                    row = cell_data.iloc[0]
-                    subj, teacher = str(row["과목"]), str(row["교사"])
-                    is_swapped = bool(row.get("is_swapped", False))
-                    sub_key = (date_str, c, p)
-                    is_sub = sub_key in sub_dict
-                    sub_teacher = str(sub_dict[sub_key]['대강교사']) if is_sub else ""
-                    
-                    grid_data[key] = {
-                        "date": str(date_str), "day": str(d), "cls": str(c), "period": int(p),
-                        "subj": subj, "teacher": teacher, "sub_teacher": sub_teacher,
-                        "is_swapped": is_swapped, "is_sub": is_sub
-                    }
-                else:
-                    grid_data[key] = {
-                        "date": str(date_str), "day": str(d), "cls": str(c), "period": int(p),
-                        "subj": "", "teacher": "", "sub_teacher": "",
-                        "is_swapped": False, "is_sub": False
-                    }
-
-    js_grid_json = json.dumps(grid_data, ensure_ascii=False)
-    classes_json = json.dumps(classes, ensure_ascii=False)
-    
-    html_code = f"""
-    <div id="grid-app">
-        <style>
-            .admin-table {{ width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }}
-            .admin-table th {{ background-color: #1e3a8a; color: #ffffff; padding: 10px 4px; font-weight: bold; border: 1px solid #1e3a8a; border-bottom: 3.5px solid #0f172a; border-right: 3.5px solid #0f172a; }}
-            .admin-table td {{ background-color: #ffffff; padding: 6px 2px; border-right: 3.5px solid #0f172a; border-bottom: 1px solid #cbd5e1; height: 60px; vertical-align: middle; cursor: pointer; position: relative; }}
-            .admin-table td:hover {{ filter: brightness(0.92); outline: 2px solid #2563eb; }}
-            .admin-table td.selected {{ outline: 3.5px solid #ef4444 !important; background-color: #fef2f2 !important; }}
-            .day-col-js {{ background-color: #1e3a8a !important; color: #ffffff !important; font-weight: 800; width: 4%; border-right: 3.5px solid #0f172a !important; border-bottom: 3.5px solid #0f172a !important; }}
-            .period-col-js {{ background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b; width: 5%; border-right: 3.5px solid #0f172a !important; }}
-            .bg-sub {{ background-color: #ffedd5 !important; }}
-            .bg-swap {{ background-color: #fef08a !important; }}
-            
-            .context-menu {{ display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }}
-            .context-menu-item {{ padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }}
-            .context-menu-item:hover {{ background-color: #f1f5f9; color: #2563eb; }}
-            .context-menu-divider {{ height: 1px; background-color: #e2e8f0; margin: 4px 0; }}
-
-            .modal-overlay {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; justify-content: center; align-items: center; }}
-            .modal-content {{ background: white; padding: 20px; border-radius: 12px; width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left; }}
-            .modal-btn {{ display: block; width: 100%; margin: 8px 0; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; }}
-            .btn-overwrite {{ background: #2563eb; color: white; }}
-            .btn-swap-paste {{ background: #eab308; color: white; }}
-            .btn-close {{ background: #94a3b8; color: white; margin-top: 15px; }}
-        </style>
-
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th style="width: 4%;">요일</th>
-                    <th style="width: 5%;">교시</th>
-                    {"".join([f"<th>{c}</th>" for c in classes])}
-                </tr>
-            </thead>
-            <tbody id="grid-body"></tbody>
-        </table>
-
-        <div id="contextMenu" class="context-menu">
-            <div class="context-menu-item" onclick="onMenuAction('SWAP')">🔄 수업 위치 맞교환</div>
-            <div class="context-menu-item" onclick="onMenuAction('SUB')">📝 대강 및 사유 지정</div>
-            <div class="context-menu-item" onclick="onMenuAction('DELETE')">🗑️ 수업 삭제 (휴강)</div>
-            <div class="context-menu-divider"></div>
-            <div class="context-menu-item" onclick="onMenuAction('COPY')">📋 수업 복사 (Ctrl+C)</div>
-            <div id="pasteOverwriteItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_OVERWRITE')">📥 복사본 덮어쓰기</div>
-            <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 복사본과 맞교환</div>
-        </div>
-
-        <div id="pasteModal" class="modal-overlay">
-            <div class="modal-content">
-                <h4 style="margin-top:0; color:#1e3a8a;">📋 붙여넣기 방식 선택</h4>
-                <p id="pasteModalInfo" style="font-size:13px; color:#475569;"></p>
-                <button class="modal-btn btn-overwrite" onclick="onMenuAction('PASTE_OVERWRITE')">1. 덮어쓰기 (기존 수업 제거 후 배치)</button>
-                <button class="modal-btn btn-swap-paste" onclick="onMenuAction('PASTE_SWAP')">2. 교체하기 (원래 수업과 서로 교환)</button>
-                <button class="modal-btn btn-close" onclick="closePasteModal()">취소</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const gridData = {js_grid_json};
-        const classes = {classes_json};
-        const days = ["월", "화", "수", "목", "금"];
-        let selectedKey = null;
-        let copiedData = null;
-
-        function renderGrid() {{
-            const tbody = document.getElementById("grid-body");
-            tbody.innerHTML = "";
-            
-            days.forEach(d => {{
-                for(let p = 1; p <= 7; p++) {{
-                    const tr = document.createElement("tr");
-                    if(p === 7) tr.style.borderBottom = "3.5px solid #0f172a";
-                    
-                    if(p === 1) {{
-                        const tdDay = document.createElement("td");
-                        tdDay.rowSpan = 7;
-                        tdDay.className = "day-col-js";
-                        tdDay.innerHTML = `<b>${{d}}</b>`;
-                        tr.appendChild(tdDay);
-                    }}
-                    
-                    const tdP = document.createElement("td");
-                    tdP.className = "period-col-js";
-                    tdP.innerText = `${{p}}교시`;
-                    tr.appendChild(tdP);
-
-                    classes.forEach(c => {{
-                        const td = document.createElement("td");
-                        const key = Object.keys(gridData).find(k => gridData[k].day === d && gridData[k].period === p && gridData[k].cls === c);
-                        const item = gridData[key];
-                        
-                        td.id = key;
-                        if(item.is_sub) td.className = "bg-sub";
-                        else if(item.is_swapped) td.className = "bg-swap";
-                        
-                        let txt = "";
-                        if(item.subj) {{
-                            if(item.is_sub) txt = `<span style="font-size:10px; background:#ea580c; color:white; padding:1px 3px; border-radius:3px;">대강</span><br><b>${{item.subj}}</b><br>(${{item.sub_teacher}})`;
-                            else if(item.is_swapped) txt = `<span style="font-size:10px; background:#ca8a04; color:white; padding:1px 3px; border-radius:3px;">교체</span><br><b>${{item.subj}}</b><br>(${{item.teacher}})`;
-                            else txt = `<b>${{item.subj}}</b><br><span style="color:#334155; font-size:12px;">(${{item.teacher}})</span>`;
-                        }} else {{
-                            txt = "-";
-                        }}
-                        
-                        td.innerHTML = txt;
-                        td.onclick = (e) => selectCell(key, td);
-                        td.oncontextmenu = (e) => {{
-                            e.preventDefault();
-                            selectCell(key, td);
-                            showContextMenu(e.clientX, e.clientY);
-                        }};
-
-                        tr.appendChild(td);
-                    }});
-                    tbody.appendChild(tr);
-                }}
-            }});
-        }}
-
-        function selectCell(key, element) {{
-            document.querySelectorAll(".admin-table td").forEach(td => td.classList.remove("selected"));
-            selectedKey = key;
-            if(element) element.classList.add("selected");
-            hideContextMenu();
-        }}
-
-        function showContextMenu(x, y) {{
-            const menu = document.getElementById("contextMenu");
-            const overItem = document.getElementById("pasteOverwriteItem");
-            const swapItem = document.getElementById("pasteSwapItem");
-            
-            if(copiedData) {{
-                overItem.style.display = "flex";
-                swapItem.style.display = "flex";
-            }} else {{
-                overItem.style.display = "none";
-                swapItem.style.display = "none";
-            }}
-
-            menu.style.left = `${{x}}px`;
-            menu.style.top = `${{y}}px`;
-            menu.style.display = "block";
-        }}
-
-        function hideContextMenu() {{
-            document.getElementById("contextMenu").style.display = "none";
-        }}
-
-        function openPasteModal() {{
-            if(!copiedData || !selectedKey) return;
-            const modal = document.getElementById("pasteModal");
-            const info = document.getElementById("pasteModalInfo");
-            const target = gridData[selectedKey];
-            info.innerHTML = `복사된 수업: <b>${{copiedData.subj}} (${{copiedData.teacher}})` +
-                             `</b><br>붙여넣을 대상: <b>[${{target.cls}}] ${{target.day}}요일 ${{target.period}}교시</b>`;
-            modal.style.display = "flex";
-        }}
-
-        function closePasteModal() {{
-            document.getElementById("pasteModal").style.display = "none";
-        }}
-
-        function onMenuAction(actionType) {{
-            hideContextMenu();
-            closePasteModal();
-            
-            if(actionType === 'COPY') {{
-                copiedData = gridData[selectedKey];
-                alert(`📋 [${{copiedData.subj}} (${{copiedData.teacher}})] 수업이 복사되었습니다.`);
-                return;
-            }}
-            
-            const item = gridData[selectedKey];
-            let url = window.top.location.pathname + `?action=${{actionType}}&date=${{item.date}}&cls=${{encodeURIComponent(item.cls)}}&period=${{item.period}}&subj=${{encodeURIComponent(item.subj)}}&teacher=${{encodeURIComponent(item.teacher)}}`;
-            
-            if(copiedData) {{
-                url += `&c_date=${{copiedData.date}}&c_cls=${{encodeURIComponent(copiedData.cls)}}&c_period=${{copiedData.period}}&c_subj=${{encodeURIComponent(copiedData.subj)}}&c_teacher=${{encodeURIComponent(copiedData.teacher)}}`;
-            }}
-            
-            // 메인 Streamlit 백엔드로 즉시 동기화 이동
-            window.top.location.href = url;
-        }}
-
-        window.onclick = (e) => {{
-            if(!e.target.closest("#contextMenu")) hideContextMenu();
-        }};
-
-        window.addEventListener("keydown", (e) => {{
-            if(!selectedKey) return;
-            if(e.key === "Delete" || e.key === "Backspace") {{
-                onMenuAction("DELETE");
-            }} else if(e.ctrlKey && e.key === "c") {{
-                onMenuAction("COPY");
-            }} else if(e.ctrlKey && e.key === "v") {{
-                if(copiedData) {{
-                    openPasteModal();
-                }} else {{
-                    alert("⚠️ 복사된 수업 데이터가 없습니다. 먼저 셀 선택 후 Ctrl+C를 누르세요.");
-                }}
-            }}
-        }});
-
-        renderGrid();
-    </script>
-    """
-    
-    return components.html(html_code, height=680, scrolling=True)
-
-# 7. 메인 탭 구동
+# 6. 메인 탭 구동
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     
     if is_admin:
-        tab1, tab2, tab3, tab4 = st.tabs(["🗓️ 시간표 스마트 통합 관리", "🔄 수업 위치 맞교환 신청", "📝 대강 지정 및 사유 (관리자 전용)", "📊 교사 시수 & 대강 수당 (관리자 전용)"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🗓️ 전체/학급/교사 시간표", "🔄 수업 위치 맞교환 신청", "📝 대강 지정 및 사유 (관리자 전용)", "📊 교사 시수 & 대강 수당 (관리자 전용)"])
     else:
         tab1, tab2 = st.tabs(["🗓️ 시간표 조회 (전체/반/교사)", "🔄 수업 위치 맞교환 신청"])
 
@@ -764,12 +469,103 @@ if parsed_df is not None and not parsed_df.empty:
             st.write("")
             st.button("🖨️ 시간표 인쇄 / PDF 저장", on_click=lambda: st.components.v1.html("<script>window.print();</script>"))
 
+        if is_admin and view_mode == "전체 시간표 (가로: 학급 / 세로: 요일·교시)":
+            st.markdown("### ⚡ 관리자 수업 빠른 편집 컨트롤러")
+            
+            # 셀 목록 생성 (드롭다운 제어)
+            cell_options = []
+            cell_map = {}
+            days = ["월", "화", "수", "목", "금"]
+            classes = sorted(parsed_df["학급"].unique())
+            sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
+
+            for d in days:
+                d_str = current_week_dates[d].strftime("%Y-%m-%d")
+                for p in range(1, 8):
+                    for c in classes:
+                        c_df = parsed_df[(parsed_df["학급"] == c) & (parsed_df["요일"] == d) & (parsed_df["교시"] == p)]
+                        if not c_df.empty:
+                            row = c_df.iloc[0]
+                            subj, teacher = row["과목"], row["교사"]
+                            sub_key = (d_str, c, p)
+                            if sub_key in sub_dict:
+                                display_txt = f"[{c}] {d}요일 {p}교시: {subj} (원래: {teacher} ➔ 대강: {sub_dict[sub_key]['대강교사']})"
+                            else:
+                                display_txt = f"[{c}] {d}요일 {p}교시: {subj} ({teacher})"
+                            
+                            label = f"{d_str}_{c}_{p}"
+                            cell_options.append((label, display_txt))
+                            cell_map[label] = {
+                                "date": d_str, "day": d, "cls": c, "period": p,
+                                "subj": subj, "teacher": teacher
+                            }
+
+            col_sel, col_act = st.columns([2.5, 2])
+            with col_sel:
+                selected_label = st.selectbox(
+                    "📌 편집/복사할 수업 셀 선택",
+                    options=[opt[0] for opt in cell_options],
+                    format_func=lambda x: dict(cell_options)[x]
+                )
+                target_cell = cell_map[selected_label]
+
+            with col_act:
+                st.write("**실행할 작업 선택:**")
+                btn_c1, btn_c2, btn_c3, btn_c4 = st.columns(4)
+                
+                with btn_c1:
+                    if st.button("📋 수업 복사", use_container_width=True):
+                        st.session_state.copied_cell = target_cell
+                        st.success(f"[{target_cell['subj']}({target_cell['teacher']})] 수업이 복사되었습니다!")
+
+                with btn_c2:
+                    if st.button("🗑️ 수업 삭제", use_container_width=True):
+                        log_entry = {
+                            "날짜": target_cell["date"], "요일": target_cell["day"], "교시": target_cell["period"],
+                            "학급": target_cell["cls"], "원교사": target_cell["teacher"], "대강교사": "휴강",
+                            "대강사유": "관리자 삭제", "단가": 0, "주차": st.session_state.week_offset
+                        }
+                        save_sub_log(log_entry)
+                        st.session_state.sub_logs = load_sub_logs()
+                        st.success("해당 수업이 삭제(휴강) 처리되었습니다.")
+                        st.rerun()
+
+                with btn_c3:
+                    if st.button("📥 덮어쓰기", use_container_width=True):
+                        if st.session_state.copied_cell:
+                            cp = st.session_state.copied_cell
+                            log_entry = {
+                                "날짜": target_cell["date"], "요일": target_cell["day"], "교시": target_cell["period"],
+                                "학급": target_cell["cls"], "원교사": target_cell["teacher"], "대강교사": cp["teacher"],
+                                "대강사유": f"수업 복사 배치 ({cp['subj']})", "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset
+                            }
+                            save_sub_log(log_entry)
+                            st.session_state.sub_logs = load_sub_logs()
+                            st.success(f"[{target_cell['cls']}] {target_cell['day']}요일 {target_cell['period']}교시에 [{cp['subj']}({cp['teacher']})] 수업이 덮어쓰기 되었습니다.")
+                            st.rerun()
+                        else:
+                            st.warning("먼저 '수업 복사' 버튼을 눌러주세요.")
+
+                with btn_c4:
+                    if st.button("🔀 교체 배치", use_container_width=True):
+                        if st.session_state.copied_cell:
+                            cp = st.session_state.copied_cell
+                            swap_entry = {
+                                "cls1": cp["cls"], "date1": cp["date"], "period1": cp["period"], "subj1": cp["subj"], "teacher1": cp["teacher"],
+                                "cls2": target_cell["cls"], "date2": target_cell["date"], "period2": target_cell["period"], "subj2": target_cell["subj"], "teacher2": target_cell["teacher"]
+                            }
+                            save_swap_request(swap_entry, auto_approve=True)
+                            st.session_state.swap_logs = load_swap_logs("APPROVED")
+                            st.success("복사한 원본 수업과 선택한 수업 위치가 서로 교체되었습니다.")
+                            st.rerun()
+                        else:
+                            st.warning("먼저 '수업 복사' 버튼을 눌러주세요.")
+
+            st.markdown("---")
+
+        # 화면 출력
         if view_mode == "전체 시간표 (가로: 학급 / 세로: 요일·교시)":
-            if is_admin:
-                st.info("💡 **관리자 가이드**: 셀 **좌클릭**(선택) 후 키보드로 **Delete**(삭제), **Ctrl+C**(복사), **Ctrl+V**(붙여넣기) 사용 가능하며, **우클릭** 시 스마트 편집 메뉴가 표시됩니다.")
-                render_interactive_admin_grid(parsed_df)
-            else:
-                st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
+            st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
         elif view_mode == "학급별 주간 시간표":
             target_cls = st.selectbox("🎯 학급 선택", sorted(parsed_df["학급"].unique()))
             st.markdown(build_weekly_html_table(parsed_df, target_cls, filter_type="CLASS"), unsafe_allow_html=True)
