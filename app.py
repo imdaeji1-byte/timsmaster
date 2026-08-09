@@ -656,4 +656,4 @@ if parsed_df is not None and not parsed_df.empty:
                 st.info("기록된 대강 내역이 없습니다.")
 
 else:
-    st.info("💡 Codespaces 폴더에 '2026년 2학기 시간표.xlsx' 파일을 위치시켜 주세요.")git add .
+    st.info("💡 Codespaces 폴더에 '2026년 2학기 시간표.xlsx' 파일을 위치시켜 주세요.")
