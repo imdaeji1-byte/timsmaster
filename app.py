@@ -450,7 +450,7 @@ def build_merged_full_grid_html(df_in):
     html += "</tbody></table></div>"
     return html
 
-# 6. 관리자용 인터랙티브 JS 그리드 컴포넌트 생성 함수 (JSON 직렬화 오류 보완 완료)
+# 6. 관리자용 인터랙티브 JS 그리드 (좌클릭 선택 / 우클릭 전용 커스텀 메뉴 / Ctrl+V 분기)
 def render_interactive_admin_grid(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
@@ -493,18 +493,24 @@ def render_interactive_admin_grid(df_in):
             .admin-table th {{ background-color: #1e3a8a; color: #ffffff; padding: 10px 4px; font-weight: bold; border: 1px solid #1e3a8a; border-bottom: 3.5px solid #0f172a; border-right: 3.5px solid #0f172a; }}
             .admin-table td {{ background-color: #ffffff; padding: 6px 2px; border-right: 3.5px solid #0f172a; border-bottom: 1px solid #cbd5e1; height: 60px; vertical-align: middle; cursor: pointer; position: relative; }}
             .admin-table td:hover {{ filter: brightness(0.92); outline: 2px solid #2563eb; }}
-            .admin-table td.selected {{ outline: 3px solid #ef4444 !important; background-color: #fef2f2 !important; }}
+            .admin-table td.selected {{ outline: 3.5px solid #ef4444 !important; background-color: #fef2f2 !important; }}
             .day-col-js {{ background-color: #1e3a8a !important; color: #ffffff !important; font-weight: 800; width: 4%; border-right: 3.5px solid #0f172a !important; border-bottom: 3.5px solid #0f172a !important; }}
             .period-col-js {{ background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b; width: 5%; border-right: 3.5px solid #0f172a !important; }}
             .bg-sub {{ background-color: #ffedd5 !important; }}
             .bg-swap {{ background-color: #fef08a !important; }}
             
-            .modal-overlay {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }}
+            /* 우클릭 커스텀 Context Menu 스타일 */
+            .context-menu {{ display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }}
+            .context-menu-item {{ padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }}
+            .context-menu-item:hover {{ background-color: #f1f5f9; color: #2563eb; }}
+            .context-menu-divider {{ height: 1px; background-color: #e2e8f0; margin: 4px 0; }}
+
+            /* Modal 팝업 (Ctrl+V 붙여넣기 방식 선택용) */
+            .modal-overlay {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; justify-content: center; align-items: center; }}
             .modal-content {{ background: white; padding: 20px; border-radius: 12px; width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left; }}
             .modal-btn {{ display: block; width: 100%; margin: 8px 0; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; }}
-            .btn-swap {{ background: #eab308; color: white; }}
-            .btn-sub {{ background: #f97316; color: white; }}
-            .btn-del {{ background: #ef4444; color: white; }}
+            .btn-overwrite {{ background: #2563eb; color: white; }}
+            .btn-swap-paste {{ background: #eab308; color: white; }}
             .btn-close {{ background: #94a3b8; color: white; margin-top: 15px; }}
         </style>
 
@@ -519,11 +525,25 @@ def render_interactive_admin_grid(df_in):
             <tbody id="grid-body"></tbody>
         </table>
 
-        <div id="cellModal" class="modal-overlay">
+        <!-- 우클릭 커스텀 컨텍스트 메뉴 -->
+        <div id="contextMenu" class="context-menu">
+            <div class="context-menu-item" onclick="onMenuAction('SWAP')">🔄 수업 위치 맞교환</div>
+            <div class="context-menu-item" onclick="onMenuAction('SUB')">📝 대강 및 사유 지정</div>
+            <div class="context-menu-item" onclick="onMenuAction('DELETE')">🗑️ 수업 삭제 (휴강)</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" onclick="onMenuAction('COPY')">📋 수업 복사 (Ctrl+C)</div>
+            <div id="pasteOverwriteItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_OVERWRITE')">📥 복사본 덮어쓰기</div>
+            <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 복사본과 맞교환</div>
+        </div>
+
+        <!-- Ctrl+V 전용 붙여넣기 선택 모달 -->
+        <div id="pasteModal" class="modal-overlay">
             <div class="modal-content">
-                <h4 id="modalTitle" style="margin-top:0; color:#1e3a8a;">📌 수업 편집 모드</h4>
-                <div id="modalBody"></div>
-                <button class="modal-btn btn-close" onclick="closeModal()">닫기</button>
+                <h4 style="margin-top:0; color:#1e3a8a;">📋 붙여넣기 방식 선택</h4>
+                <p id="pasteModalInfo" style="font-size:13px; color:#475569;"></p>
+                <button class="modal-btn btn-overwrite" onclick="onMenuAction('PASTE_OVERWRITE')">1. 덮어쓰기 (기존 수업 제거 후 배치)</button>
+                <button class="modal-btn btn-swap-paste" onclick="onMenuAction('PASTE_SWAP')">2. 교체하기 (원래 수업과 서로 교환)</button>
+                <button class="modal-btn btn-close" onclick="closePasteModal()">취소</button>
             </div>
         </div>
     </div>
@@ -576,7 +596,17 @@ def render_interactive_admin_grid(df_in):
                         }}
                         
                         td.innerHTML = txt;
+                        
+                        // 좌클릭: 단순 선택 전용
                         td.onclick = (e) => selectCell(key, td);
+                        
+                        // 우클릭: 커스텀 우클릭 메뉴 팝업
+                        td.oncontextmenu = (e) => {{
+                            e.preventDefault();
+                            selectCell(key, td);
+                            showContextMenu(e.clientX, e.clientY);
+                        }};
+
                         tr.appendChild(td);
                     }});
                     tbody.appendChild(tr);
@@ -587,51 +617,78 @@ def render_interactive_admin_grid(df_in):
         function selectCell(key, element) {{
             document.querySelectorAll(".admin-table td").forEach(td => td.classList.remove("selected"));
             selectedKey = key;
-            element.classList.add("selected");
-            openModal(key);
+            if(element) element.classList.add("selected");
+            hideContextMenu();
         }}
 
-        function openModal(key) {{
-            const item = gridData[key];
-            const modal = document.getElementById("cellModal");
-            const title = document.getElementById("modalTitle");
-            const body = document.getElementById("modalBody");
-            
-            title.innerText = `📍 [${{item.cls}}] ${{item.day}}요일 ${{item.period}}교시`;
-            
-            let html = `<p style="margin-bottom:12px;">현재 수업: <b>${{item.subj ? item.subj + ' (' + (item.sub_teacher || item.teacher) + ')' : '수업 없음'}}</b></p>`;
-            html += `<button class="modal-btn btn-swap" onclick="triggerAction('SWAP', '${{key}}')">🔄 수업 위치 맞교환</button>`;
-            html += `<button class="modal-btn btn-sub" onclick="triggerAction('SUB', '${{key}}')">📝 대강 및 사유 지정</button>`;
-            html += `<button class="modal-btn btn-del" onclick="triggerAction('DELETE', '${{key}}')">🗑️ 수업 삭제 (휴강)</button>`;
+        function showContextMenu(x, y) {{
+            const menu = document.getElementById("contextMenu");
+            const overItem = document.getElementById("pasteOverwriteItem");
+            const swapItem = document.getElementById("pasteSwapItem");
             
             if(copiedData) {{
-                html += `<hr style="margin:12px 0;"><button class="modal-btn" style="background:#2563eb; color:white;" onclick="triggerAction('PASTE_OVERWRITE', '${{key}}')">📋 복사한 수업 덮어쓰기 [${{copiedData.subj}}]</button>`;
+                overItem.style.display = "flex";
+                swapItem.style.display = "flex";
+            }} else {{
+                overItem.style.display = "none";
+                swapItem.style.display = "none";
             }}
-            
-            body.innerHTML = html;
+
+            menu.style.left = `${{x}}px`;
+            menu.style.top = `${{y}}px`;
+            menu.style.display = "block";
+        }}
+
+        function hideContextMenu() {{
+            document.getElementById("contextMenu").style.display = "none";
+        }}
+
+        function openPasteModal() {{
+            if(!copiedData || !selectedKey) return;
+            const modal = document.getElementById("pasteModal");
+            const info = document.getElementById("pasteModalInfo");
+            const target = gridData[selectedKey];
+            info.innerHTML = `복사된 수업: <b>${{copiedData.subj}} (${{copiedData.teacher}})` +
+                             `</b><br>붙여넣을 대상: <b>[${{target.cls}}] ${{target.day}}요일 ${{target.period}}교시</b>`;
             modal.style.display = "flex";
         }}
 
-        function closeModal() {{
-            document.getElementById("cellModal").style.display = "none";
+        function closePasteModal() {{
+            document.getElementById("pasteModal").style.display = "none";
         }}
 
-        function triggerAction(actionType, key) {{
-            closeModal();
-            const payload = {{ action: actionType, targetKey: key, item: gridData[key], copied: copiedData }};
+        function onMenuAction(actionType) {{
+            hideContextMenu();
+            closePasteModal();
+            
+            if(actionType === 'COPY') {{
+                copiedData = gridData[selectedKey];
+                alert(`📋 [${{copiedData.subj}} (${{copiedData.teacher}})] 수업이 복사되었습니다.\n원하는 셀 선택 후 Ctrl+V 또는 우클릭 메뉴로 붙여넣으세요.`);
+                return;
+            }}
+            
+            const payload = {{ action: actionType, targetKey: selectedKey, item: gridData[selectedKey], copied: copiedData }};
             window.parent.postMessage({{ type: "TIMEMASTER_GRID_ACTION", data: payload }}, "*");
         }}
 
+        // 외부 클릭 시 우클릭 메뉴 닫기
+        window.onclick = (e) => {{
+            if(!e.target.closest("#contextMenu")) hideContextMenu();
+        }};
+
+        // 키보드 단축키 (Delete, Ctrl+C, Ctrl+V)
         window.addEventListener("keydown", (e) => {{
             if(!selectedKey) return;
+            
             if(e.key === "Delete" || e.key === "Backspace") {{
-                triggerAction("DELETE", selectedKey);
+                onMenuAction("DELETE");
             }} else if(e.ctrlKey && e.key === "c") {{
-                copiedData = gridData[selectedKey];
-                alert(`📋 [${{copiedData.subj}}] 수업이 복사되었습니다. 다른 셀 클릭 후 Ctrl+V 하세요.`);
+                onMenuAction("COPY");
             }} else if(e.ctrlKey && e.key === "v") {{
                 if(copiedData) {{
-                    triggerAction("PASTE_OVERWRITE", selectedKey);
+                    openPasteModal();
+                }} else {{
+                    alert("⚠️ 복사된 수업 데이터가 없습니다. 먼저 셀을 선택하고 Ctrl+C를 누르세요.");
                 }}
             }}
         }});
@@ -660,7 +717,7 @@ if parsed_df is not None and not parsed_df.empty:
 
         if view_mode == "전체 시간표 (가로: 학급 / 세로: 요일·교시)":
             if is_admin:
-                st.info("💡 **관리자 가이드**: 셀 클릭 시 모달 팝업([교체]/[대강]/[삭제])이 뜨며, PC 키보드로 **Delete(삭제)**, **Ctrl+C(복사)**, **Ctrl+V(붙여넣기)**가 가능합니다.")
+                st.info("💡 **관리자 가이드**: 셀 **좌클릭**(선택) 후 키보드로 **Delete**(삭제), **Ctrl+C**(복사), **Ctrl+V**(붙여넣기) 사용 가능하며, **우클릭** 시 스마트 편집 메뉴가 표시됩니다.")
                 render_interactive_admin_grid(parsed_df)
             else:
                 st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
