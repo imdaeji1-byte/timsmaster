@@ -502,7 +502,7 @@ def build_merged_full_grid_html(df_in):
     html += "</tbody></table></div>"
     return html
 
-# 6. 관리자용 스마트 우클릭 & 단축키 JS 엔진
+# 6. 관리자용 스마트 우클릭 & 단축키 JS 엔진 (보안 우회 로직 적용)
 def render_interactive_admin_grid(df_in):
     days = ["월", "화", "수", "목", "금"]
     classes = sorted(df_in["학급"].unique())
@@ -625,9 +625,21 @@ def render_interactive_admin_grid(df_in):
 
                     classes.forEach(c => {{
                         const td = document.createElement("td");
-                        const key = Object.keys(gridData).find(k => gridData[k].day === d && gridData[k].period === p && gridData[k].cls === c);
-                        const item = gridData[key];
+                        // 1. 타입 불일치 에러 방지를 위해 모두 String으로 강제 변환 후 비교
+                        const key = Object.keys(gridData).find(k => 
+                            String(gridData[k].day) === String(d) && 
+                            String(gridData[k].period) === String(p) && 
+                            String(gridData[k].cls) === String(c)
+                        );
                         
+                        // 2. 키를 찾지 못한 경우 방어 로직 추가
+                        if (!key || !gridData[key]) {{
+                            td.innerText = "-";
+                            tr.appendChild(td);
+                            return;
+                        }}
+
+                        const item = gridData[key];
                         td.id = key;
                         if(item.is_sub) td.className = "bg-sub";
                         else if(item.is_swapped) td.className = "bg-swap";
@@ -642,6 +654,7 @@ def render_interactive_admin_grid(df_in):
                         }}
                         
                         td.innerHTML = txt;
+                        
                         td.onclick = (e) => selectCell(key, td);
                         td.oncontextmenu = (e) => {{
                             e.preventDefault();
@@ -690,8 +703,7 @@ def render_interactive_admin_grid(df_in):
             const modal = document.getElementById("pasteModal");
             const info = document.getElementById("pasteModalInfo");
             const target = gridData[selectedKey];
-            info.innerHTML = `복사된 수업: <b>${{copiedData.subj}} (${{copiedData.teacher}})` +
-                             `</b><br>붙여넣을 대상: <b>[${{target.cls}}] ${{target.day}}요일 ${{target.period}}교시</b>`;
+            info.innerHTML = `복사된 수업: <b>${{copiedData.subj}} (${{copiedData.teacher}})</b><br>붙여넣을 대상: <b>[${{target.cls}}] ${{target.day}}요일 ${{target.period}}교시</b>`;
             modal.style.display = "flex";
         }}
 
@@ -709,14 +721,22 @@ def render_interactive_admin_grid(df_in):
                 return;
             }}
             
+            if(!selectedKey || !gridData[selectedKey]) return;
             const item = gridData[selectedKey];
-            let url = window.top.location.pathname + `?act=${{actionType}}&date=${{item.date}}&cls=${{encodeURIComponent(item.cls)}}&period=${{item.period}}&subj=${{encodeURIComponent(item.subj)}}&teacher=${{encodeURIComponent(item.teacher)}}`;
+            
+            let qs = `?act=${{actionType}}&date=${{item.date}}&cls=${{encodeURIComponent(item.cls)}}&period=${{item.period}}&subj=${{encodeURIComponent(item.subj)}}&teacher=${{encodeURIComponent(item.teacher)}}`;
             
             if(copiedData) {{
-                url += `&c_date=${{copiedData.date}}&c_cls=${{encodeURIComponent(copiedData.cls)}}&c_period=${{copiedData.period}}&c_subj=${{encodeURIComponent(copiedData.subj)}}&c_teacher=${{encodeURIComponent(copiedData.teacher)}}`;
+                qs += `&c_date=${{copiedData.date}}&c_cls=${{encodeURIComponent(copiedData.cls)}}&c_period=${{copiedData.period}}&c_subj=${{encodeURIComponent(copiedData.subj)}}&c_teacher=${{encodeURIComponent(copiedData.teacher)}}`;
             }}
             
-            window.top.location.href = url;
+            // 3. 핵심 해결책: window.top.location 차단 우회
+            // a 태그를 생성해 최상단 프레임(target="_top")으로 현재 경로 유지한 채 쿼리 파라미터만 던짐
+            const redirectLink = document.createElement("a");
+            redirectLink.href = qs; 
+            redirectLink.target = "_top";
+            document.body.appendChild(redirectLink);
+            redirectLink.click();
         }}
 
         window.onclick = (e) => {{
@@ -738,7 +758,11 @@ def render_interactive_admin_grid(df_in):
             }}
         }});
 
-        renderGrid();
+        try {{
+            renderGrid();
+        }} catch(e) {{
+            console.error("Grid rendering error: ", e);
+        }}
     </script>
     """
     
