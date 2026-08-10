@@ -8,6 +8,11 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 기본 설정 및 세션 초기화
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
+# ==========================================
+# 🚨 누락되었던 세션 초기화 코드 복구 🚨
+if "copied_data" not in st.session_state:
+    st.session_state.copied_data = None
+# ==========================================
 if "last_action_id" not in st.session_state:
     st.session_state.last_action_id = None
 if "school_name" not in st.session_state:
@@ -101,6 +106,7 @@ def init_custom_component():
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
+                copiedData = event.data.args.copied_data || null; // 추가
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
@@ -220,7 +226,7 @@ def init_custom_component():
         window.addEventListener("keydown", (e) => {
             if(!selectedKey) return;
             if(e.key === "Delete" || e.key === "Backspace") {
-                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; // 초고속 눈속임
+                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; 
                 showToast("🗑️ 삭제 완료");
                 dispatchAction("DELETE");
             }
@@ -535,7 +541,7 @@ if parsed_df is not None and not parsed_df.empty:
                                 grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
                             else: grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-                # ⚡ JS 팝업 통합 컴포넌트 호출
+                # ⚡ 초고속 JS 컴포넌트 호출
                 action_result = AdminGrid(grid_data=grid_data, classes=classes, teacher_list=teacher_list, copied_data=st.session_state.copied_data, key="admin_grid_fast")
 
                 if action_result:

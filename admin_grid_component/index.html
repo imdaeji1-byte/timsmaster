@@ -7,45 +7,58 @@
         .admin-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
         .admin-table th { background-color: #1e3a8a; color: #ffffff; padding: 10px 4px; font-weight: bold; border: 1px solid #1e3a8a; border-bottom: 3.5px solid #0f172a; border-right: 3.5px solid #0f172a; }
         .admin-table td { background-color: #ffffff; padding: 6px 2px; border-right: 3.5px solid #0f172a; border-bottom: 1px solid #cbd5e1; height: 60px; vertical-align: middle; cursor: pointer; position: relative; }
-        .admin-table td:hover { filter: brightness(0.92); outline: 2px solid #2563eb; }
-        .admin-table td.selected { outline: 3.5px solid #ef4444 !important; background-color: #fef2f2 !important; }
+        .admin-table td:hover { filter: brightness(0.92); outline: 2px solid #2563eb; z-index: 10; }
+        .admin-table td.selected { outline: 3.5px solid #ef4444 !important; background-color: #fef2f2 !important; z-index: 20; }
         .day-col-js { background-color: #1e3a8a !important; color: #ffffff !important; font-weight: 800; width: 4%; border-right: 3.5px solid #0f172a !important; border-bottom: 3.5px solid #0f172a !important; }
         .period-col-js { background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b; width: 5%; border-right: 3.5px solid #0f172a !important; }
         .bg-sub { background-color: #ffedd5 !important; }
         .bg-swap { background-color: #fef08a !important; }
-        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 230px; z-index: 10000; padding: 6px 0; text-align: left; }
+        
+        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
         .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
         .context-menu-item:hover { background-color: #f1f5f9; color: #2563eb; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
+        
+        .popover { display: none; position: absolute; background: white; border: 2px solid #2563eb; border-radius: 8px; padding: 12px; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10001; text-align: left; }
+        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 8px; border: none; border-radius: 5px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; }
+        .btn-overwrite { background: #2563eb; color: white; }
+        .btn-swap-paste { background: #eab308; color: white; }
+        .btn-close { background: #94a3b8; color: white; margin-top: 8px; }
+        .pop-input { width: 92%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
+        
+        #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: none; z-index: 100000; transition: opacity 0.3s; }
     </style>
     <script>
-        function sendMessageToStreamlit(type, data) {
-            const outData = Object.assign({isStreamlitMessage: true, type: type}, data);
-            window.parent.postMessage(outData, "*");
+        function sendMessageToStreamlit(data) {
+            window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: "streamlit:setComponentValue"}, {value: data}), "*");
         }
         const Streamlit = {
-            setComponentReady: function() { sendMessageToStreamlit("streamlit:componentReady", {apiVersion: 1}); },
-            setFrameHeight: function(height) { sendMessageToStreamlit("streamlit:setFrameHeight", {height: height}); },
-            setComponentValue: function(value) { sendMessageToStreamlit("streamlit:setComponentValue", {value: value}); }
+            setComponentReady: function() { window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1}, "*"); },
+            setFrameHeight: function(h) { window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h}, "*"); }
         };
 
-        let gridData = {}; let classes = []; let copiedData = null;
-        let selectedKey = null; const days = ["월", "화", "수", "목", "금"];
+        let gridData = {}; let classes = []; let teacherList = []; let copiedData = null;
+        let selectedKey = null; let selectedTdElement = null; const days = ["월", "화", "수", "목", "금"];
 
         window.addEventListener("message", function(event) {
             if (event.source !== window.parent) return;
             if (event.data.type === "streamlit:render") {
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
-                copiedData = event.data.args.copied_data;
+                teacherList = event.data.args.teacher_list || [];
                 renderGrid();
-                setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 30), 50);
+                setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
         });
 
+        function showToast(msg) {
+            const toast = document.getElementById("jsToast");
+            toast.innerText = msg; toast.style.display = "block"; toast.style.opacity = "1";
+            setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.style.display="none", 300); }, 2000);
+        }
+
         function renderGrid() {
-            const tbody = document.getElementById("grid-body");
-            tbody.innerHTML = "";
+            const tbody = document.getElementById("grid-body"); tbody.innerHTML = "";
             const thead_tr = document.getElementById("grid-head-tr");
             thead_tr.innerHTML = '<th style="width: 4%;">요일</th><th style="width: 5%;">교시</th>';
             classes.forEach(c => { const th = document.createElement("th"); th.innerText = c; thead_tr.appendChild(th); });
@@ -54,24 +67,16 @@
                 for(let p = 1; p <= 7; p++) {
                     const tr = document.createElement("tr");
                     if(p === 7) tr.style.borderBottom = "3.5px solid #0f172a";
-                    if(p === 1) {
-                        const tdDay = document.createElement("td");
-                        tdDay.rowSpan = 7; tdDay.className = "day-col-js";
-                        tdDay.innerHTML = `<b>${d}</b>`; tr.appendChild(tdDay);
-                    }
-                    const tdP = document.createElement("td");
-                    tdP.className = "period-col-js"; tdP.innerText = `${p}교시`;
-                    tr.appendChild(tdP);
+                    if(p === 1) { const tdDay = document.createElement("td"); tdDay.rowSpan = 7; tdDay.className = "day-col-js"; tdDay.innerHTML = `<b>${d}</b>`; tr.appendChild(tdDay); }
+                    const tdP = document.createElement("td"); tdP.className = "period-col-js"; tdP.innerText = `${p}교시`; tr.appendChild(tdP);
 
                     classes.forEach(c => {
                         const td = document.createElement("td");
                         const key = Object.keys(gridData).find(k => String(gridData[k].day) === String(d) && String(gridData[k].period) === String(p) && String(gridData[k].cls) === String(c));
                         if(!key || !gridData[key]) { td.innerText = "-"; tr.appendChild(td); return; }
 
-                        const item = gridData[key];
-                        td.id = key;
-                        if(item.is_sub) td.className = "bg-sub";
-                        else if(item.is_swapped) td.className = "bg-swap";
+                        const item = gridData[key]; td.id = key;
+                        if(item.is_sub) td.className = "bg-sub"; else if(item.is_swapped) td.className = "bg-swap";
                         
                         let txt = "-";
                         if(item.subj) {
@@ -91,63 +96,134 @@
 
         function selectCell(key, element) {
             document.querySelectorAll(".admin-table td").forEach(td => td.classList.remove("selected"));
-            selectedKey = key; if(element) element.classList.add("selected");
-            hideContextMenu();
+            selectedKey = key; selectedTdElement = element; if(element) element.classList.add("selected");
+            hideAllPopups();
+        }
+
+        function positionPopup(popId) {
+            const pop = document.getElementById(popId);
+            const rect = selectedTdElement.getBoundingClientRect();
+            let popLeft = rect.left + window.pageXOffset;
+            let popTop = rect.bottom + window.pageYOffset + 5;
+            if(popLeft + 290 > window.innerWidth) popLeft = window.innerWidth - 300;
+            pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; pop.style.display = "block";
         }
 
         function showContextMenu(x, y) {
             const menu = document.getElementById("contextMenu");
-            const overItem = document.getElementById("pasteOverwriteItem");
-            const swapItem = document.getElementById("pasteSwapItem");
-            if(copiedData) { overItem.style.display = "flex"; swapItem.style.display = "flex"; } 
-            else { overItem.style.display = "none"; swapItem.style.display = "none"; }
+            document.getElementById("pasteMenuBtn").style.display = copiedData ? "flex" : "none";
             menu.style.left = `${x}px`; menu.style.top = `${y}px`; menu.style.display = "block";
         }
-        function hideContextMenu() { document.getElementById("contextMenu").style.display = "none"; }
 
-        function onMenuAction(actionType) {
-            hideContextMenu();
-            if(!selectedKey || !gridData[selectedKey]) return;
-            // 핵심: 매 액션마다 고유 ID(action_id)를 생성하여 무한반복 방지
-            const actionPayload = {
-                action_id: Date.now().toString() + Math.random().toString(),
-                act: actionType,
-                target: gridData[selectedKey]
-            };
-            if(actionType === 'COPY') {
-                copiedData = gridData[selectedKey];
-                actionPayload.target = copiedData;
-            }
-            Streamlit.setComponentValue(actionPayload);
+        function hideAllPopups() {
+            document.getElementById("contextMenu").style.display = "none";
+            document.getElementById("pastePopover").style.display = "none";
+            document.getElementById("swapPopover").style.display = "none";
+            document.getElementById("subPopover").style.display = "none";
         }
 
-        window.onclick = (e) => { if(!e.target.closest("#contextMenu")) hideContextMenu(); };
+        function openPastePopover() {
+            hideAllPopups();
+            if(!copiedData || !selectedKey) return;
+            document.getElementById("pastePopInfo").innerHTML = `복사: <b>${copiedData.subj}(${copiedData.teacher})</b><br>대상: <b>[${gridData[selectedKey].cls}] ${gridData[selectedKey].day} ${gridData[selectedKey].period}교시</b>`;
+            positionPopup("pastePopover");
+        }
+
+        function openSwapPopover() {
+            hideAllPopups();
+            if(!selectedKey) return;
+            const t = gridData[selectedKey];
+            if(!t.subj) { showToast("⚠️ 빈 셀은 지정 교체할 수 없습니다."); return; }
+            document.getElementById("swapPopInfo").innerHTML = `대상: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
+            positionPopup("swapPopover");
+        }
+
+        function openSubPopover() {
+            hideAllPopups();
+            if(!selectedKey) return;
+            const t = gridData[selectedKey];
+            if(!t.subj) { showToast("⚠️ 빈 셀에는 대강을 지정할 수 없습니다."); return; }
+            document.getElementById("subPopInfo").innerHTML = `대강 대상: <b>[${t.cls}] ${t.subj} (${t.teacher})</b>`;
+            
+            const busyTeachers = Object.values(gridData).filter(i => String(i.day) === String(t.day) && Number(i.period) === Number(t.period) && i.teacher).map(i => i.teacher);
+            const avail = teacherList.filter(tea => !busyTeachers.includes(tea) && tea !== t.teacher);
+            const sel = document.getElementById("subTeacherSelect"); sel.innerHTML = "";
+            if(avail.length === 0) { sel.innerHTML = '<option value="">가능한 교사 없음</option>'; } 
+            else { avail.forEach(tea => { const opt = document.createElement("option"); opt.value = tea; opt.innerText = tea; sel.appendChild(opt); }); }
+            positionPopup("subPopover");
+        }
+
+        // 서버 전송 로직
+        function dispatchAction(act, extraData = {}) {
+            hideAllPopups();
+            const payload = Object.assign({ action_id: Date.now().toString(), act: act, target: gridData[selectedKey], copiedData: copiedData }, extraData);
+            sendMessageToStreamlit(payload);
+        }
+
+        window.onclick = (e) => { if(!e.target.closest(".context-menu") && !e.target.closest(".popover")) hideAllPopups(); };
+
         window.addEventListener("keydown", (e) => {
             if(!selectedKey) return;
-            if(e.key === "Delete" || e.key === "Backspace") { onMenuAction("DELETE"); }
-            else if(e.ctrlKey && e.key === "c") { onMenuAction("COPY"); }
+            if(e.key === "Delete" || e.key === "Backspace") {
+                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; // 초고속 눈속임
+                showToast("🗑️ 삭제 완료");
+                dispatchAction("DELETE");
+            }
+            else if(e.ctrlKey && e.key === "c") {
+                const t = gridData[selectedKey];
+                if(t.subj) { copiedData = t; showToast(`📋 복사 완료: ${t.subj}(${t.teacher})`); }
+                else { showToast("⚠️ 빈 셀은 복사 불가"); }
+            }
             else if(e.ctrlKey && e.key === "v") {
-                if(copiedData) onMenuAction("PASTE_OVERWRITE"); // 기본은 단순 이동
-                else Streamlit.setComponentValue({action_id: Date.now().toString(), act: 'NO_COPY_DATA'});
+                if(copiedData) openPastePopover();
+                else showToast("⚠️ 복사된 데이터가 없습니다.");
             }
         });
     </script>
 </head>
 <body onload="Streamlit.setComponentReady()">
+    <div id="jsToast"></div>
     <table class="admin-table">
-        <thead><tr id="grid-head-tr"></tr></thead>
-        <tbody id="grid-body"></tbody>
+        <thead><tr id="grid-head-tr"></tr></thead><tbody id="grid-body"></tbody>
     </table>
-    <!-- 우클릭 팝업 메뉴 (JS 팝업 대신 파이썬 네이티브 UI로 호출) -->
+    
     <div id="contextMenu" class="context-menu">
-        <div class="context-menu-item" onclick="onMenuAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
+        <div class="context-menu-item" onclick="dispatchAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
+        <div class="context-menu-item" onclick="copiedData=gridData[selectedKey]; showToast('📋 복사 완료'); hideAllPopups();">📋 수업 복사 (Ctrl+C)</div>
+        <div id="pasteMenuBtn" class="context-menu-item" style="display:none;" onclick="openPastePopover()">📥 붙여넣기 (이동/교체)</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="onMenuAction('COPY')">📋 수업 복사 (Ctrl+C)</div>
-        <div id="pasteOverwriteItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_OVERWRITE')">📥 복사된 수업 이동(배치)</div>
-        <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 복사된 수업과 교체</div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="onMenuAction('REQ_SWAP')">🔄 날짜 지정 수업 교체</div>
-        <div class="context-menu-item" onclick="onMenuAction('REQ_SUB')">📝 스마트 대강 지정</div>
+        <div class="context-menu-item" onclick="openSwapPopover()">🔄 날짜/교시 지정 교체</div>
+        <div class="context-menu-item" onclick="openSubPopover()">📝 대강 교사 지정</div>
+    </div>
+    
+    <div id="pastePopover" class="popover">
+        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
+        <div id="pastePopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
+        <button class="pop-btn btn-overwrite" onclick="dispatchAction('PASTE_OVERWRITE')">1. 수업 이동 (덮어쓰기)</button>
+        <button class="pop-btn btn-swap-paste" onclick="dispatchAction('PASTE_SWAP')">2. 맞교환 (서로 교체)</button>
+        <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
+    </div>
+
+    <div id="swapPopover" class="popover">
+        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 수업 직접 교체</div>
+        <div id="swapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
+        <label style="font-size:11px; font-weight:bold;">교체 대상 날짜:</label>
+        <input type="date" id="swapDateInput" class="pop-input">
+        <label style="font-size:11px; font-weight:bold;">교시:</label>
+        <select id="swapPeriodInput" class="pop-input"><option value="1">1교시</option><option value="2">2교시</option><option value="3">3교시</option><option value="4">4교시</option><option value="5">5교시</option><option value="6">6교시</option><option value="7">7교시</option></select>
+        <button class="pop-btn btn-swap-paste" onclick="dispatchAction('SWAP_DIRECT', {s_date: document.getElementById('swapDateInput').value, s_period: document.getElementById('swapPeriodInput').value})">이 시간의 수업과 교체</button>
+        <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
+    </div>
+
+    <div id="subPopover" class="popover">
+        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📝 대강 지정</div>
+        <div id="subPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
+        <label style="font-size:11px; font-weight:bold;">대강 사유:</label>
+        <input type="text" id="subReasonInput" class="pop-input" placeholder="출장, 공결 등">
+        <label style="font-size:11px; font-weight:bold;">가능한 교사:</label>
+        <select id="subTeacherSelect" class="pop-input"></select>
+        <button class="pop-btn btn-overwrite" onclick="dispatchAction('SUB_DIRECT', {sub_t: document.getElementById('subTeacherSelect').value, sub_r: document.getElementById('subReasonInput').value})">대강 저장 적용</button>
+        <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 </body>
 </html>
