@@ -10,7 +10,6 @@ st.set_page_config(page_title="TimeMaster - 모던 시간표 시스템", layout=
 
 if "copied_data" not in st.session_state: st.session_state.copied_data = None
 if "last_action_id" not in st.session_state: st.session_state.last_action_id = None
-if "action_ui" not in st.session_state: st.session_state.action_ui = None
 if "school_name" not in st.session_state: st.session_state.school_name = "경남해양고등학교"
 if "hourly_rate" not in st.session_state: st.session_state.hourly_rate = 13000
 if "week_offset" not in st.session_state: st.session_state.week_offset = 0
@@ -21,83 +20,36 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-def go_prev_week(): st.session_state.week_offset -= 1
-def go_this_week(): st.session_state.week_offset = 0
-def go_next_week(): st.session_state.week_offset += 1
-
-# 2. 🖨️ A4 1페이지 출력 보정 & 🚫 아이콘 텍스트 노출 차단 CSS
+# 2. 🖨️ A4 1페이지 출력 보정 & 🚫 visibility 텍스트 완벽 제거 CSS
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
     
-    /* 🚫 Streamlit 아이콘 폰트 깨짐(visibility, keyboard_double 등) 완전 숨김 패치 */
-    [data-testid="stSidebarCollapseButton"],
-    [data-testid="stInputVisibilityButton"],
-    [data-testid="stInputVisibilityButton"] *,
-    button[aria-label="Expand sidebar"],
-    button[aria-label="Collapse sidebar"] {
-        display: none !important;
+    /* 🚫 visibility / keyboard_double 텍스트 노출 완벽 박멸 패치 */
+    div[data-testid="stInputVisibilityButton"],
+    div[data-testid="stInputVisibilityButton"] *,
+    button[aria-label="Visibility"],
+    [data-testid="stSidebarCollapseButton"] {
         font-size: 0 !important;
         color: transparent !important;
         visibility: hidden !important;
-        width: 0 !important;
-        height: 0 !important;
-        overflow: hidden !important;
+        display: none !important;
     }
 
-    /* 🖨️ 인쇄 전용 스타일 (첫 페이지 빈 칸 차단 & A4 1장 쏙 맞춤) */
+    /* 🖨️ 인쇄 전용 스타일 */
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
-        
-        html, body {
-            background-color: white !important;
-            zoom: 92%;
-            margin: 0 !important;
-            padding: 0 !important;
-            height: auto !important;
-            overflow: visible !important;
-        }
-
+        html, body { background-color: white !important; zoom: 92%; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
         header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], 
         [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], 
         [data-testid="stAlert"], [data-testid="stToastContainer"], iframe, .stButton, .print-hide, h1.print-hide { 
-            display: none !important;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border: none !important;
+            display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;
         }
-
-        .main, .main .block-container, [data-testid="stVerticalBlock"] {
-            padding: 0 !important;
-            margin: 0 !important;
-            max-width: 100% !important;
-            width: 100% !important;
-            gap: 0 !important;
-        }
-
-        .print-title {
-            display: block !important;
-            margin-top: 0 !important;
-            margin-bottom: 10px !important;
-            padding: 0 !important;
-        }
-        .print-title h3 {
-            font-size: 20px !important;
-            margin: 0 !important;
-            color: #000 !important;
-        }
-
-        .table-container { 
-            display: block !important; 
-            box-shadow: none !important; 
-            border: 2px solid #000 !important; 
-            margin: 0 !important;
-            padding: 2px !important;
-            page-break-before: avoid !important;
-            page-break-inside: avoid !important;
-        }
+        .main, .main .block-container, [data-testid="stVerticalBlock"] { padding: 0 !important; margin: 0 !important; max-width: 100% !important; width: 100% !important; gap: 0 !important; }
+        .print-title { display: block !important; margin-top: 0 !important; margin-bottom: 10px !important; padding: 0 !important; }
+        .print-title h3 { font-size: 20px !important; margin: 0 !important; color: #000 !important; }
+        .table-container { display: block !important; box-shadow: none !important; border: 2px solid #000 !important; margin: 0 !important; padding: 2px !important; page-break-before: avoid !important; page-break-inside: avoid !important; }
         .unified-table { width: 100% !important; border-collapse: separate !important; border-spacing: 2px !important; }
         .unified-table th { background-color: #f1f5f9 !important; color: #000 !important; border: 1px solid #000 !important; -webkit-print-color-adjust: exact; }
         .unified-table td { border: 1px solid #64748b !important; height: 50px !important; }
@@ -129,12 +81,10 @@ st.markdown("""
     .status-badge { font-size: 9px; padding: 1px 5px; border-radius: 8px; font-weight: 800; display: inline-block; margin-bottom: 2px; }
     .badge-swap { background-color: #eab308 !important; color: white !important; }
     .badge-sub { background-color: #f97316 !important; color: white !important; }
-    
-    .action-panel { border: 2px solid #bae6fd; border-radius: 16px; padding: 15px; background: #f0f9ff; margin-bottom: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 모던 JS 컴포넌트
+# 3. ⚡ 우클릭 팝업 일체형 UI 컴포넌트
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -156,17 +106,18 @@ def init_custom_component():
         .bg-sub { background-color: #ffedd5 !important; }
         .bg-swap { background-color: #fef9c3 !important; }
         
-        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
+        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
         .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 700; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
         .context-menu-item:hover { background-color: #f1f5f9; color: #2563eb; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
         
-        .popover { display: none; position: absolute; background: white; border: 2px solid #3b82f6; border-radius: 14px; padding: 12px; width: 270px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 10001; text-align: left; }
-        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 8px; border: none; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; }
-        .btn-overwrite { background: #2563eb; color: white; }
-        .btn-swap-paste { background: #eab308; color: white; }
-        .btn-close { background: #94a3b8; color: white; margin-top: 8px; }
-        .pop-input { width: 94%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }
+        /* 팝업 일체형 디자인 */
+        .popover { display: none; position: absolute; background: white; border: 2.5px solid #0284c7; border-radius: 16px; padding: 14px; width: 280px; box-shadow: 0 12px 30px rgba(0,0,0,0.18); z-index: 10001; text-align: left; }
+        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 9px; border: none; border-radius: 10px; font-weight: bold; font-size: 12.5px; cursor: pointer; text-align: center; }
+        .btn-primary { background: #0284c7; color: white; }
+        .btn-swap { background: #eab308; color: white; }
+        .btn-close { background: #94a3b8; color: white; margin-top: 6px; }
+        .pop-input { width: 95%; padding: 7px; margin: 5px 0 10px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; }
         
         #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: none; z-index: 100000; transition: opacity 0.3s; }
     </style>
@@ -247,7 +198,7 @@ def init_custom_component():
             const rect = selectedTdElement.getBoundingClientRect();
             let popLeft = rect.left + window.pageXOffset;
             let popTop = rect.bottom + window.pageYOffset + 5;
-            if(popLeft + 280 > window.innerWidth) popLeft = window.innerWidth - 290;
+            if(popLeft + 290 > window.innerWidth) popLeft = window.innerWidth - 300;
             pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; pop.style.display = "block";
         }
 
@@ -271,20 +222,68 @@ def init_custom_component():
             positionPopup("pastePopover");
         }
 
+        /* 📍 팝업 내부 스마트 날짜 기반 후보 자동 추출 */
         function openCrossSwapPopover() {
             hideAllPopups();
             if(!selectedKey) return;
             const t = gridData[selectedKey];
             if(!t.subj) { showToast("⚠️ 빈 셀은 교체할 수 없습니다."); return; }
-            document.getElementById("crossSwapPopInfo").innerHTML = `교체 대상: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
-            document.getElementById("crossSwapDateInput").value = t.date;
+            document.getElementById("crossSwapPopInfo").innerHTML = `교체 기준: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
+            const dInput = document.getElementById("crossSwapDateInput");
+            dInput.value = t.date;
+            updateSwapCandidates();
             positionPopup("crossSwapPopover");
         }
 
-        function submitCrossSwap() {
-            const val = document.getElementById("crossSwapDateInput").value;
-            if(!val) { showToast("⚠️ 교체할 날짜를 선택하세요."); return; }
-            dispatchAction('REQ_CROSS_SWAP', { s_date: val });
+        function updateSwapCandidates() {
+            const t = gridData[selectedKey];
+            const selDate = document.getElementById("crossSwapDateInput").value;
+            const candSelect = document.getElementById("swapCandidateSelect");
+            candSelect.innerHTML = "";
+            
+            if(!selDate) return;
+            
+            const targetDayNum = new Date(selDate).getDay(); // 0:일, 6:토
+            if(targetDayNum === 0 || targetDayNum === 6) {
+                candSelect.innerHTML = '<option value="">주말은 선택 불가</option>';
+                return;
+            }
+            
+            const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+            const targetDayKr = dayNames[targetDayNum];
+            
+            // 해당 날짜 동일 학급 수업 검색
+            const candidates = Object.values(gridData).filter(item => 
+                String(item.cls) === String(t.cls) && 
+                String(item.day) === String(targetDayKr) && 
+                item.subj !== "" && item.subj !== "-"
+            );
+            
+            if(candidates.length === 0) {
+                candSelect.innerHTML = '<option value="">교체 가능한 수업 없음</option>';
+            } else {
+                candidates.forEach(c => {
+                    if(c.date === t.date && c.period === t.period) return; // 자기 자신 제외
+                    const opt = document.createElement("option");
+                    opt.value = JSON.stringify({period2: c.period, subj2: c.subj, teacher2: c.teacher});
+                    opt.innerText = `${c.period}교시 - ${c.subj} (${c.teacher})`;
+                    candSelect.appendChild(opt);
+                });
+            }
+        }
+
+        function submitSmartSwap() {
+            const dateVal = document.getElementById("crossSwapDateInput").value;
+            const candVal = document.getElementById("swapCandidateSelect").value;
+            if(!candVal) { showToast("⚠️ 교체할 수업을 선택하세요."); return; }
+            
+            const target2 = JSON.parse(candVal);
+            dispatchAction('EXECUTE_CROSS_SWAP', {
+                s_date2: dateVal,
+                period2: target2.period2,
+                subj2: target2.subj2,
+                teacher2: target2.teacher2
+            });
         }
 
         function openSubPopover() {
@@ -345,35 +344,41 @@ def init_custom_component():
         <div class="context-menu-item" onclick="copyCurrentCell()">📋 수업 복사 (Ctrl+C)</div>
         <div id="pasteMenuBtn" class="context-menu-item" style="display:none;" onclick="openPastePopover()">📥 붙여넣기 (이동/교체)</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="openCrossSwapPopover()">🔄 날짜 지정 스마트 교체</div>
+        <div class="context-menu-item" onclick="openCrossSwapPopover()">🔄 팝업 일체형 수업 교체</div>
         <div class="context-menu-item" onclick="openSubPopover()">📝 스마트 대강 지정</div>
     </div>
     
     <div id="pastePopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
         <div id="pastePopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
-        <button class="pop-btn btn-overwrite" onclick="dispatchAction('PASTE_OVERWRITE')">1. 수업 이동 (덮어쓰기)</button>
-        <button class="pop-btn btn-swap-paste" onclick="dispatchAction('PASTE_SWAP')">2. 맞교환 (서로 교체)</button>
+        <button class="pop-btn btn-primary" onclick="dispatchAction('PASTE_OVERWRITE')">1. 수업 이동 (덮어쓰기)</button>
+        <button class="pop-btn btn-swap" onclick="dispatchAction('PASTE_SWAP')">2. 맞교환 (서로 교체)</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
+    <!-- 📍 팝업 내부 통합 수업 교체 창 -->
     <div id="crossSwapPopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 날짜 지정 스마트 교체</div>
-        <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
-        <label style="font-size:11px; font-weight:bold;">교체할 날짜 선택 (모든 주차 가능):</label>
-        <input type="date" id="crossSwapDateInput" class="pop-input">
-        <button class="pop-btn btn-swap-paste" onclick="submitCrossSwap()">이동/교체 대상 조회</button>
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">🔄 스마트 수업 교체</div>
+        <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
+        
+        <label style="font-size:11px; font-weight:bold; color:#334155;">1. 교체할 날짜 선택:</label>
+        <input type="date" id="crossSwapDateInput" class="pop-input" onchange="updateSwapCandidates()">
+        
+        <label style="font-size:11px; font-weight:bold; color:#334155;">2. 교체 대상 수업 선택:</label>
+        <select id="swapCandidateSelect" class="pop-input"></select>
+        
+        <button class="pop-btn btn-swap" onclick="submitSmartSwap()">✅ 맞교환 즉시 확정</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
     <div id="subPopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📝 스마트 대강 지정</div>
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">📝 스마트 대강 지정</div>
         <div id="subPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
         <label style="font-size:11px; font-weight:bold;">대강 사유:</label>
         <input type="text" id="subReasonInput" class="pop-input" placeholder="출장, 공결 등">
         <label style="font-size:11px; font-weight:bold;">가능한 교사:</label>
         <select id="subTeacherSelect" class="pop-input"></select>
-        <button class="pop-btn btn-overwrite" onclick="dispatchAction('SUB_DIRECT', {sub_t: document.getElementById('subTeacherSelect').value, sub_r: document.getElementById('subReasonInput').value})">대강 저장 적용</button>
+        <button class="pop-btn btn-primary" onclick="dispatchAction('SUB_DIRECT', {sub_t: document.getElementById('subTeacherSelect').value, sub_r: document.getElementById('subReasonInput').value})">대강 저장 적용</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 </body>
@@ -384,7 +389,7 @@ def init_custom_component():
 
 AdminGrid = init_custom_component()
 
-# 4. DB 초기화 및 관리
+# 4. DB 및 상태 관리
 DB_FILE = "timemaster_data.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -472,10 +477,6 @@ st.session_state.swap_logs = load_swap_logs("APPROVED")
 def get_week_dates(offset=0):
     base_date = date(2026, 8, 10)
     target_date = base_date + timedelta(weeks=offset)
-    start_of_week = target_date - timedelta(days=target_date.weekday())
-    return {"월": start_of_week, "화": start_of_week + timedelta(days=1), "수": start_of_week + timedelta(days=2), "목": start_of_week + timedelta(days=3), "금": start_of_week + timedelta(days=4)}
-
-def get_week_dates_from_date(target_date):
     start_of_week = target_date - timedelta(days=target_date.weekday())
     return {"월": start_of_week, "화": start_of_week + timedelta(days=1), "수": start_of_week + timedelta(days=2), "목": start_of_week + timedelta(days=3), "금": start_of_week + timedelta(days=4)}
 
@@ -658,61 +659,6 @@ with c_nav2:
     with col_b4: 
         if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
 
-# [Cross-week] 스마트 교체 파이썬 팝업 연동 UI
-if st.session_state.action_ui is not None:
-    ui = st.session_state.action_ui
-    if ui["type"] == "SWAP_DATE_SELECT":
-        st.markdown("<div class='action-panel print-hide'>", unsafe_allow_html=True)
-        st.markdown(f"#### 🔄 날짜 지정 스마트 수업 교체")
-        st.write(f"**교체 기준 수업:** {ui['target']['date']} {ui['target']['period']}교시 [{ui['target']['cls']}] {ui['target']['subj']} ({ui['target']['teacher']})")
-        
-        target_date = pd.to_datetime(ui["s_date"]).date()
-        target_day_kr = ["월","화","수","목","금","토","일"][target_date.weekday()]
-        
-        if target_day_kr in ["토", "일"]: st.error("주말은 교체할 수 없습니다.")
-        else:
-            t_week_dates = get_week_dates_from_date(target_date)
-            t_df = get_latest_updated_timetable(p_df, t_week_dates)
-            
-            valid_options = []
-            cls_df = t_df[(t_df["학급"] == ui["target"]["cls"]) & (t_df["요일"] == target_day_kr)]
-            
-            for _, row in cls_df.iterrows():
-                r_period = row["교시"]
-                if ui["target"]["date"] == str(target_date) and int(ui["target"]["period"]) == r_period: continue
-                if row["과목"] == "" or row["과목"] == "-": continue
-                
-                c1 = t_df[(t_df["교사"] == ui["target"]["teacher"]) & (t_df["요일"] == target_day_kr) & (t_df["교시"] == r_period) & (t_df["학급"] != ui["target"]["cls"])]
-                c2 = parsed_df[(parsed_df["교사"] == row["교사"]) & (parsed_df["요일"] == ui["target"]["day"]) & (parsed_df["교시"] == int(ui["target"]["period"])) & (parsed_df["학급"] != ui["target"]["cls"])]
-                
-                if c1.empty and c2.empty:
-                    valid_options.append((r_period, row["과목"], row["교사"]))
-            
-            c_s1, c_s2 = st.columns([2, 1])
-            with c_s1:
-                if valid_options:
-                    selected_opt = st.selectbox(f"[{target_date} ({target_day_kr})] 교체 가능한 안전한 수업 선택", valid_options, format_func=lambda x: f"{x[0]}교시 - {x[1]} ({x[2]} 선생님)")
-                else:
-                    st.warning(f"{target_date} 해당 날짜에 시수 충돌 없이 교체 가능한 수업이 전혀 없습니다.")
-                    selected_opt = None
-            with c_s2:
-                st.write("")
-                col_btn1, col_btn2 = st.columns(2)
-                if col_btn1.button("✅ 맞교환 확정", type="primary", use_container_width=True) and selected_opt:
-                    log_entry = {
-                        "cls1": ui["target"]["cls"], "date1": ui["target"]["date"], "period1": int(ui["target"]["period"]), "subj1": ui["target"]["subj"], "teacher1": ui["target"]["teacher"],
-                        "cls2": ui["target"]["cls"], "date2": str(target_date), "period2": selected_opt[0], "subj2": selected_opt[1], "teacher2": selected_opt[2]
-                    }
-                    save_swap_request(log_entry, auto_approve=True)
-                    st.session_state.swap_logs = load_swap_logs("APPROVED")
-                    st.session_state.action_ui = None
-                    st.toast("🔀 주차 간 스마트 맞교환이 완료되었습니다!")
-                    st.rerun()
-                if col_btn2.button("❌ 취소", use_container_width=True):
-                    st.session_state.action_ui = None
-                    st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
 # 8. 메인 화면 렌더링
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
@@ -786,8 +732,19 @@ if parsed_df is not None and not parsed_df.empty:
                                 st.session_state.sub_logs = load_sub_logs()
                                 st.rerun()
 
-                        elif act == "REQ_CROSS_SWAP" and t_item:
-                            st.session_state.action_ui = {"type": "SWAP_DATE_SELECT", "target": t_item, "s_date": action_result.get("s_date")}
+                        # 📍 팝업 내부 교체 실행 액션 처리
+                        elif act == "EXECUTE_CROSS_SWAP" and t_item:
+                            s_date2 = action_result.get("s_date2")
+                            period2 = int(action_result.get("period2"))
+                            subj2 = action_result.get("subj2")
+                            teacher2 = action_result.get("teacher2")
+                            
+                            save_swap_request({
+                                "cls1": t_item["cls"], "date1": t_item["date"], "period1": int(t_item["period"]), "subj1": t_item["subj"], "teacher1": t_item["teacher"],
+                                "cls2": t_item["cls"], "date2": s_date2, "period2": period2, "subj2": subj2, "teacher2": teacher2
+                            }, auto_approve=True)
+                            st.session_state.swap_logs = load_swap_logs("APPROVED")
+                            st.toast("🔀 팝업 일체형 수업 맞교환 완료!")
                             st.rerun()
 
                         elif act in ["PASTE_OVERWRITE", "PASTE_SWAP"] and c_item and t_item:
@@ -849,7 +806,7 @@ if parsed_df is not None and not parsed_df.empty:
                 st.markdown("##### 📍 [수업 A] 첫 번째 수업 지정")
                 date_a = st.date_input("수업 A 날짜 선택", date(2026, 8, 10), key="d_a")
                 day_a_kr = ["월", "화", "수", "목", "금", "토", "일"][date_a.weekday()]
-                t_week_dates_a = get_week_dates_from_date(date_a)
+                t_week_dates_a = get_week_dates(st.session_state.week_offset)
                 t_df_a = get_latest_updated_timetable(p_df, t_week_dates_a)
                 cls_df_a = t_df_a[(t_df_a["학급"] == selected_cls) & (t_df_a["요일"] == day_a_kr)].copy()
                 
@@ -869,7 +826,7 @@ if parsed_df is not None and not parsed_df.empty:
                 st.markdown("##### 📍 [수업 B] 맞교환 가능한 수업 (충돌 검증 완료)")
                 date_b = st.date_input("수업 B 날짜 선택", date(2026, 8, 10), key="d_b")
                 day_b_kr = ["월", "화", "수", "목", "금", "토", "일"][date_b.weekday()]
-                t_week_dates_b = get_week_dates_from_date(date_b)
+                t_week_dates_b = get_week_dates(st.session_state.week_offset)
                 t_df_b = get_latest_updated_timetable(p_df, t_week_dates_b)
                 cls_df_b = t_df_b[(t_df_b["학급"] == selected_cls) & (t_df_b["요일"] == day_b_kr)].copy()
                 
