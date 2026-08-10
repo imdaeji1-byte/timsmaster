@@ -120,7 +120,11 @@ st.markdown("""
     .badge-sub { background-color: #f97316 !important; color: white !important; }
     
     .action-panel { border: 2px solid #bae6fd; border-radius: 16px; padding: 15px; background: #f0f9ff; margin-bottom: 15px; }
-</style>
+/* 아이콘 텍스트 깨짐 숨김 */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stInputVisibilityButton"] {
+        display: none !important;
+    }</style>
 """, unsafe_allow_html=True)
 
 # 3. ⚡ 모던 JS 컴포넌트
