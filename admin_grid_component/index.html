@@ -46,6 +46,7 @@
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
+                copiedData = event.data.args.copied_data || null; // 추가
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
@@ -165,7 +166,7 @@
         window.addEventListener("keydown", (e) => {
             if(!selectedKey) return;
             if(e.key === "Delete" || e.key === "Backspace") {
-                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; // 초고속 눈속임
+                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; 
                 showToast("🗑️ 삭제 완료");
                 dispatchAction("DELETE");
             }

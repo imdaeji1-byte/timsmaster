@@ -8,11 +8,8 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 기본 설정 및 세션 초기화
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
-# ==========================================
-# 🚨 누락되었던 세션 초기화 코드 복구 🚨
 if "copied_data" not in st.session_state:
     st.session_state.copied_data = None
-# ==========================================
 if "last_action_id" not in st.session_state:
     st.session_state.last_action_id = None
 if "school_name" not in st.session_state:
@@ -52,7 +49,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. ⚡ 초고속 JS 컴포넌트 (모든 팝업과 클립보드를 브라우저 단에서 즉시 처리)
+# 2. ⚡ 초고속 JS 컴포넌트 (팝업 + 주차간 데이터 동기화)
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -74,17 +71,17 @@ def init_custom_component():
         .bg-sub { background-color: #ffedd5 !important; }
         .bg-swap { background-color: #fef08a !important; }
         
-        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
+        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }
         .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
         .context-menu-item:hover { background-color: #f1f5f9; color: #2563eb; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
         
-        .popover { display: none; position: absolute; background: white; border: 2px solid #2563eb; border-radius: 8px; padding: 12px; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10001; text-align: left; }
+        .popover { display: none; position: absolute; background: white; border: 2px solid #2563eb; border-radius: 8px; padding: 12px; width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10001; text-align: left; }
         .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 8px; border: none; border-radius: 5px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; }
         .btn-overwrite { background: #2563eb; color: white; }
         .btn-swap-paste { background: #eab308; color: white; }
         .btn-close { background: #94a3b8; color: white; margin-top: 8px; }
-        .pop-input { width: 92%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
+        .pop-input { width: 94%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
         
         #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: none; z-index: 100000; transition: opacity 0.3s; }
     </style>
@@ -106,7 +103,7 @@ def init_custom_component():
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
-                copiedData = event.data.args.copied_data || null; // 추가
+                copiedData = event.data.args.copied_data || null; // 파이썬 세션에서 최신 복사본 로드
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
@@ -166,7 +163,7 @@ def init_custom_component():
             const rect = selectedTdElement.getBoundingClientRect();
             let popLeft = rect.left + window.pageXOffset;
             let popTop = rect.bottom + window.pageYOffset + 5;
-            if(popLeft + 290 > window.innerWidth) popLeft = window.innerWidth - 300;
+            if(popLeft + 290 > window.innerWidth) popLeft = window.innerWidth - 320;
             pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; pop.style.display = "block";
         }
 
@@ -183,6 +180,7 @@ def init_custom_component():
             document.getElementById("subPopover").style.display = "none";
         }
 
+        // [복사/붙여넣기 팝업]
         function openPastePopover() {
             hideAllPopups();
             if(!copiedData || !selectedKey) return;
@@ -190,15 +188,46 @@ def init_custom_component():
             positionPopup("pastePopover");
         }
 
+        // [스마트 교체 팝업 - 현재 주차 내에서 충돌 없는 수업만 필터링]
         function openSwapPopover() {
             hideAllPopups();
             if(!selectedKey) return;
             const t = gridData[selectedKey];
-            if(!t.subj) { showToast("⚠️ 빈 셀은 지정 교체할 수 없습니다."); return; }
+            if(!t.subj) { showToast("⚠️ 빈 셀은 교체 기준이 될 수 없습니다."); return; }
             document.getElementById("swapPopInfo").innerHTML = `대상: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
+            
+            const sel = document.getElementById("swapTargetSelect");
+            sel.innerHTML = "";
+            let validCount = 0;
+
+            // 교체 가능한 수업 선별 로직 (시수 충돌 원천 차단)
+            Object.values(gridData).forEach(item => {
+                if(item.cls === t.cls && item.subj && (item.day !== t.day || item.period !== t.period)) {
+                    const c1 = Object.values(gridData).find(x => x.teacher === t.teacher && x.day === item.day && x.period === item.period && x.cls !== t.cls);
+                    const c2 = Object.values(gridData).find(x => x.teacher === item.teacher && x.day === t.day && x.period === t.period && x.cls !== item.cls);
+                    
+                    if(!c1 && !c2) {
+                        const opt = document.createElement("option");
+                        opt.value = item.date + "|" + item.period; 
+                        opt.innerText = `[${item.day} ${item.period}교시] ${item.subj}(${item.teacher})`;
+                        sel.appendChild(opt);
+                        validCount++;
+                    }
+                }
+            });
+
+            if(validCount === 0) sel.innerHTML = '<option value="">가능한 수업 없음</option>';
             positionPopup("swapPopover");
         }
 
+        function submitSwap() {
+            const val = document.getElementById("swapTargetSelect").value;
+            if(!val) { showToast("⚠️ 교체 대상을 선택하세요."); return; }
+            const parts = val.split("|");
+            dispatchAction('SWAP_DIRECT', { s_date: parts[0], s_period: parts[1] });
+        }
+
+        // [대강 지정 팝업]
         function openSubPopover() {
             hideAllPopups();
             if(!selectedKey) return;
@@ -214,6 +243,18 @@ def init_custom_component():
             positionPopup("subPopover");
         }
 
+        function copyCurrentCell() {
+            const t = gridData[selectedKey];
+            if(t && t.subj) {
+                copiedData = t; 
+                showToast(`📋 복사 완료: ${t.subj}(${t.teacher})`);
+                dispatchAction("COPY"); // 서버 세션 동기화 (주차 이동 대비)
+            } else {
+                showToast("⚠️ 빈 셀은 복사 불가");
+                hideAllPopups();
+            }
+        }
+
         // 서버 전송 로직
         function dispatchAction(act, extraData = {}) {
             hideAllPopups();
@@ -226,15 +267,11 @@ def init_custom_component():
         window.addEventListener("keydown", (e) => {
             if(!selectedKey) return;
             if(e.key === "Delete" || e.key === "Backspace") {
-                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; 
+                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; // 초고속 빈칸 처리
                 showToast("🗑️ 삭제 완료");
                 dispatchAction("DELETE");
             }
-            else if(e.ctrlKey && e.key === "c") {
-                const t = gridData[selectedKey];
-                if(t.subj) { copiedData = t; showToast(`📋 복사 완료: ${t.subj}(${t.teacher})`); }
-                else { showToast("⚠️ 빈 셀은 복사 불가"); }
-            }
+            else if(e.ctrlKey && e.key === "c") { copyCurrentCell(); }
             else if(e.ctrlKey && e.key === "v") {
                 if(copiedData) openPastePopover();
                 else showToast("⚠️ 복사된 데이터가 없습니다.");
@@ -250,11 +287,11 @@ def init_custom_component():
     
     <div id="contextMenu" class="context-menu">
         <div class="context-menu-item" onclick="dispatchAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
-        <div class="context-menu-item" onclick="copiedData=gridData[selectedKey]; showToast('📋 복사 완료'); hideAllPopups();">📋 수업 복사 (Ctrl+C)</div>
+        <div class="context-menu-item" onclick="copyCurrentCell()">📋 수업 복사 (Ctrl+C)</div>
         <div id="pasteMenuBtn" class="context-menu-item" style="display:none;" onclick="openPastePopover()">📥 붙여넣기 (이동/교체)</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="openSwapPopover()">🔄 날짜/교시 지정 교체</div>
-        <div class="context-menu-item" onclick="openSubPopover()">📝 대강 교사 지정</div>
+        <div class="context-menu-item" onclick="openSwapPopover()">🔄 이번주 내 수업 교체</div>
+        <div class="context-menu-item" onclick="openSubPopover()">📝 스마트 대강 지정</div>
     </div>
     
     <div id="pastePopover" class="popover">
@@ -266,18 +303,16 @@ def init_custom_component():
     </div>
 
     <div id="swapPopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 수업 직접 교체</div>
+        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 이번주 내 스마트 교체</div>
         <div id="swapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
-        <label style="font-size:11px; font-weight:bold;">교체 대상 날짜:</label>
-        <input type="date" id="swapDateInput" class="pop-input">
-        <label style="font-size:11px; font-weight:bold;">교시:</label>
-        <select id="swapPeriodInput" class="pop-input"><option value="1">1교시</option><option value="2">2교시</option><option value="3">3교시</option><option value="4">4교시</option><option value="5">5교시</option><option value="6">6교시</option><option value="7">7교시</option></select>
-        <button class="pop-btn btn-swap-paste" onclick="dispatchAction('SWAP_DIRECT', {s_date: document.getElementById('swapDateInput').value, s_period: document.getElementById('swapPeriodInput').value})">이 시간의 수업과 교체</button>
+        <label style="font-size:11px; font-weight:bold;">교체 가능한 수업 목록 (충돌 자동제외):</label>
+        <select id="swapTargetSelect" class="pop-input"></select>
+        <button class="pop-btn btn-swap-paste" onclick="submitSwap()">선택한 수업과 교체</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
     <div id="subPopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📝 대강 지정</div>
+        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📝 스마트 대강 지정</div>
         <div id="subPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
         <label style="font-size:11px; font-weight:bold;">대강 사유:</label>
         <input type="text" id="subReasonInput" class="pop-input" placeholder="출장, 공결 등">
@@ -359,6 +394,15 @@ def clear_all_db():
     conn.commit()
     conn.close()
 
+def reset_date_range(start_date, end_date):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM sub_logs WHERE s_date BETWEEN ? AND ?", (start_date, end_date))
+    c.execute("DELETE FROM cell_overrides WHERE s_date BETWEEN ? AND ?", (start_date, end_date))
+    c.execute("DELETE FROM swap_logs WHERE (date1 BETWEEN ? AND ?) OR (date2 BETWEEN ? AND ?)", (start_date, end_date, start_date, end_date))
+    conn.commit()
+    conn.close()
+
 st.session_state.sub_logs = load_sub_logs()
 st.session_state.swap_logs = load_swap_logs()
 
@@ -383,6 +427,43 @@ if mode == "관리자 모드 (수업교체/대강)":
 # 5. 파싱 및 병합
 DEFAULT_EXCEL = "2026년 2학기 시간표.xlsx"
 if st.session_state.raw_df is None and os.path.exists(DEFAULT_EXCEL): st.session_state.raw_df = pd.read_excel(DEFAULT_EXCEL)
+
+if mode == "관리자 모드 (수업교체/대강)" and st.session_state.admin_authenticated:
+    with st.expander("⚙️ 시스템 설정 및 데이터 관리"):
+        c_s, c_r = st.columns(2)
+        with c_s:
+            ns = st.text_input("학교명 변경", value=st.session_state.school_name)
+            if ns != st.session_state.school_name: st.session_state.school_name = ns; st.rerun()
+        with c_r:
+            st.session_state.hourly_rate = st.number_input("대강비 단가(원)", value=st.session_state.hourly_rate, step=1000)
+
+        up_file = st.file_uploader("새 기초 시간표 엑셀 업로드 (.xlsx)", type=["xlsx"])
+        if up_file is not None:
+            try: st.session_state.raw_df = pd.read_excel(up_file); st.success("업데이트 완료!")
+            except Exception as e: st.error(f"파일 오류: {e}")
+
+        st.markdown("---")
+        st.markdown("##### 🧹 특정 기간 변경사항 초기화 (기초 시간표로 복구)")
+        c_r1, c_r2, c_r3 = st.columns([1, 1, 1.5])
+        with c_r1: reset_start = st.date_input("초기화 시작일", current_week_dates["월"])
+        with c_r2: reset_end = st.date_input("초기화 종료일", current_week_dates["금"])
+        with c_r3:
+            st.write("")
+            st.write("")
+            if st.button("🔥 선택 기간만 초기화", use_container_width=True):
+                reset_date_range(str(reset_start), str(reset_end))
+                st.session_state.sub_logs = load_sub_logs()
+                st.session_state.swap_logs = load_swap_logs()
+                st.success(f"{reset_start} ~ {reset_end} 기간이 초기화되었습니다.")
+                st.rerun()
+                
+        st.markdown("---")
+        if st.button("🚨 데이터 완전 전체 초기화"):
+            clear_all_db()
+            st.session_state.sub_logs = []
+            st.session_state.swap_logs = []
+            st.success("모든 내역이 초기화되었습니다.")
+            st.rerun()
 
 def parse_excel_timetable(df_in):
     if df_in is None: return None, []
@@ -523,7 +604,7 @@ if parsed_df is not None and not parsed_df.empty:
 
         if view_mode == "전체 시간표":
             if is_admin:
-                st.info("💡 **스마트 사용법**: **우클릭**(교체/대강 팝업창 띄우기), **Ctrl+C/V**(복사/붙여넣기), **Delete**(즉시 빈칸 삭제)")
+                st.info("💡 **스마트 사용법**: **우클릭**(자동 필터링 교체/대강 팝업창), **Ctrl+C/V**(다주차 간 복사/붙여넣기), **Delete**(즉시 빈칸 삭제)")
                 days = ["월", "화", "수", "목", "금"]; classes = sorted(parsed_df["학급"].unique())
                 sub_dict = {(log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs}
                 grid_data = {}
@@ -541,7 +622,7 @@ if parsed_df is not None and not parsed_df.empty:
                                 grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
                             else: grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-                # ⚡ 초고속 JS 컴포넌트 호출
+                # ⚡ 초고속 JS 컴포넌트 호출 (복사된 데이터 상태를 지속 전달)
                 action_result = AdminGrid(grid_data=grid_data, classes=classes, teacher_list=teacher_list, copied_data=st.session_state.copied_data, key="admin_grid_fast")
 
                 if action_result:
@@ -552,7 +633,11 @@ if parsed_df is not None and not parsed_df.empty:
                         t_item = action_result.get("target")
                         c_item = action_result.get("copiedData")
                         
-                        if act == "DELETE" and t_item:
+                        if act == "COPY" and t_item:
+                            st.session_state.copied_data = t_item
+                            # 복사 액션은 UI를 리렌더링하지 않아도 브라우저 단에서 관리되므로 rerun 생략
+                            
+                        elif act == "DELETE" and t_item:
                             t_date, t_cls, t_period = t_item["date"], t_item["cls"], int(t_item["period"])
                             day_kr = ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()]
                             save_sub_log({"날짜": t_date, "요일": day_kr, "교시": t_period, "학급": t_cls, "원교사": t_item["teacher"], "대강교사": "빈칸", "대강사유": "관리자 삭제", "단가": 0, "주차": st.session_state.week_offset})
@@ -573,20 +658,14 @@ if parsed_df is not None and not parsed_df.empty:
                                 s_date = pd.to_datetime(s_date_str).date()
                                 s_day_kr = ["월","화","수","목","금","토","일"][s_date.weekday()]
                                 s_period = int(s_period_str)
+                                target_cell = parsed_df[(parsed_df["학급"] == t_item["cls"]) & (parsed_df["요일"] == s_day_kr) & (parsed_df["교시"] == s_period)]
                                 
-                                if s_day_kr in ["토", "일"]: st.toast("⚠️ 주말은 지정할 수 없습니다.")
+                                if target_cell.empty or target_cell.iloc[0]["과목"] == "": st.toast("⚠️ 해당 시간에 대상 학급의 수업이 없습니다.")
                                 else:
-                                    target_cell = parsed_df[(parsed_df["학급"] == t_item["cls"]) & (parsed_df["요일"] == s_day_kr) & (parsed_df["교시"] == s_period)]
-                                    if target_cell.empty or target_cell.iloc[0]["과목"] == "": st.toast("⚠️ 해당 시간에 대상 학급의 수업이 없습니다.")
-                                    else:
-                                        c_teacher, c_subj = target_cell.iloc[0]["교사"], target_cell.iloc[0]["과목"]
-                                        c1 = parsed_df[(parsed_df["교사"] == t_item['teacher']) & (parsed_df["요일"] == s_day_kr) & (parsed_df["교시"] == s_period) & (parsed_df["학급"] != t_item['cls'])]
-                                        c2 = parsed_df[(parsed_df["교사"] == c_teacher) & (parsed_df["요일"] == t_item['day']) & (parsed_df["교시"] == int(t_item['period'])) & (parsed_df["학급"] != t_item['cls'])]
-                                        if not c1.empty or not c2.empty: st.toast("⚠️ 해당 시간에 교사 일정이 중복되어 교체 불가합니다.")
-                                        else:
-                                            save_swap_request({"cls1": t_item["cls"], "date1": t_item["date"], "period1": int(t_item["period"]), "subj1": t_item["subj"], "teacher1": t_item["teacher"], "cls2": t_item["cls"], "date2": str(s_date), "period2": s_period, "subj2": c_subj, "teacher2": c_teacher})
-                                            st.session_state.swap_logs = load_swap_logs()
-                                            st.rerun()
+                                    c_teacher, c_subj = target_cell.iloc[0]["교사"], target_cell.iloc[0]["과목"]
+                                    save_swap_request({"cls1": t_item["cls"], "date1": t_item["date"], "period1": int(t_item["period"]), "subj1": t_item["subj"], "teacher1": t_item["teacher"], "cls2": t_item["cls"], "date2": str(s_date), "period2": s_period, "subj2": c_subj, "teacher2": c_teacher})
+                                    st.session_state.swap_logs = load_swap_logs()
+                                    st.rerun()
 
                         elif act in ["PASTE_OVERWRITE", "PASTE_SWAP"] and c_item and t_item:
                             t_date, t_cls, t_period = t_item["date"], t_item["cls"], int(t_item["period"])
