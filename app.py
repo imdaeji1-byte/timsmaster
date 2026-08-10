@@ -26,25 +26,25 @@ st.markdown("""
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
     
-    /* 🚫 비밀번호 입력창 우측 우측 눈모양 버튼 및 아이콘 텍스트만 정밀 차단 */
-    [data-testid="stTextInput"] div[aria-hidden="true"] {
+    /* 🚫 비밀번호 입력창 우측 눈모양 버튼 및 visibility 텍스트 정밀 차단 (라벨은 유지) */
+    [data-testid="stTextInput"] button,
+    [data-testid="stInputVisibilityButton"],
+    [data-testid="stSidebarCollapseButton"] {
         display: none !important;
         font-size: 0 !important;
         color: transparent !important;
         visibility: hidden !important;
         width: 0 !important;
+        height: 0 !important;
+        pointer-events: none !important;
     }
     
-    /* 🎨 비밀번호 라벨 및 입력칸 모던 스타일ing */
+    /* 🎨 비밀번호 라벨 및 입력칸 모던 스타일링 */
     [data-testid="stTextInput"] label {
         font-weight: 800 !important;
         color: #0f172a !important;
         font-size: 14px !important;
         margin-bottom: 6px !important;
-    }
-    
-    [data-testid="stSidebarCollapseButton"] {
-        display: none !important;
     }
 
     /* 🖨️ 인쇄 전용 스타일 */
@@ -61,7 +61,7 @@ st.markdown("""
         .print-title h3 { font-size: 20px !important; margin: 0 !important; color: #000 !important; }
         .table-container { display: block !important; box-shadow: none !important; border: 2px solid #000 !important; margin: 0 !important; padding: 2px !important; page-break-before: avoid !important; page-break-inside: avoid !important; }
         .unified-table { width: 100% !important; border-collapse: separate !important; border-spacing: 2px !important; }
-        .unified-table th { background-color: #38bdf8 !important; color: #000 !important; border: 1px solid #000 !important; -webkit-print-color-adjust: exact; }
+        .unified-table th { background-color: #f1f5f9 !important; color: #000 !important; border: 1px solid #000 !important; -webkit-print-color-adjust: exact; }
         .unified-table td { border: 1px solid #64748b !important; height: 50px !important; }
         .day-col { background-color: #e0f2fe !important; color: #000 !important; -webkit-print-color-adjust: exact; }
         .period-col { background-color: #f1f5f9 !important; color: #000 !important; -webkit-print-color-adjust: exact; }
@@ -71,12 +71,12 @@ st.markdown("""
         .badge-swap { background-color: #eab308 !important; color: white !important; -webkit-print-color-adjust: exact; }
     }
     
-    /* 🎨 웹 화면 전용 모던 CSS & 맨 윗줄 헤더 색상 포인트 강조 */
+    /* 🎨 웹 화면 전용 모던 CSS & 시간표 맨 윗줄 헤더 눈 편한 색상으로 롤백 */
     .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 18px; border: 2px solid #e2e8f0; box-shadow: 0 8px 20px rgba(0,0,0,0.04); background: white; padding: 6px; }
     .unified-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; table-layout: fixed; }
     
-    /* 🌟 시간표 맨 윗줄(요일/교시/학급명) 강조 배경색 변경 */
-    .unified-table th { background-color: #0284c7 !important; color: #ffffff !important; padding: 11px 4px; font-weight: 800; font-size: 13.5px; border-radius: 10px; letter-spacing: -0.3px; }
+    /* 🌟 시간표 맨 윗줄(요일/교시/학급명) 부드러운 파스텔톤 배경 */
+    .unified-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; font-size: 13.5px; border-radius: 10px; border-bottom: 2px solid #cbd5e1; }
     
     .unified-table td { background-color: #f8fafc; padding: 6px 1px; border-radius: 10px; vertical-align: middle; height: 58px; word-break: break-all; transition: transform 0.1s ease; }
     
@@ -111,8 +111,8 @@ def init_custom_component():
         body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; }
         .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
         
-        /* 🌟 JS 관리자 표 맨 윗줄 헤더 강조 색상 변경 */
-        .admin-table th { background-color: #0284c7 !important; color: #ffffff !important; padding: 11px 4px; font-weight: 800; border-radius: 10px; font-size: 13.5px; }
+        /* 🌟 JS 관리자 표 맨 윗줄 헤더 부드러운 파스텔톤 배경 */
+        .admin-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; border-radius: 10px; font-size: 13.5px; border-bottom: 2px solid #cbd5e1; }
         
         .admin-table td { background-color: #f8fafc; padding: 6px 2px; border-radius: 10px; height: 58px; vertical-align: middle; cursor: pointer; position: relative; }
         .admin-table td:hover { filter: brightness(0.95); outline: 2px solid #0284c7; }
@@ -456,7 +456,7 @@ def save_swap_request(log, auto_approve=True):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     status = 'APPROVED' if auto_approve else 'PENDING'
-    c.execute("INSERT INTO swap_logs (cls1, date1, period1, subj1, teacher1, cls2, date2, period2, subj2, teacher2, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (log["cls1"], log["date1"], log["period1"], log["subj1"], log["teacher1"], log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"], status))
+    c.execute("INSERT INTO swap_logs (cls1, date1, period1, subj1, teacher1, cls2, date2, period2, subj2, teacher2, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (log["cls1"], log["date1"], log["period1"], log["subj1"], teacher1, log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"], status))
     conn.commit()
     conn.close()
 
@@ -495,12 +495,12 @@ def get_week_dates(offset=0):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_dates["금"].strftime("%Y-%m-%d")
 
-# 5. 사이드바 (비밀번호 입력칸 라벨 및 placeholder 복원)
+# 5. 사이드바 (🚨 진짜 비밀번호 힌트 제거 및 깔끔한 문구 적용)
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
 mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 if mode == "관리자 모드 (수업교체/대강)":
     if not st.session_state.admin_authenticated:
-        pin = st.sidebar.text_input("🔑 관리자 비밀번호 입력", type="password", placeholder="비밀번호 입력 (예: 3060)")
+        pin = st.sidebar.text_input("🔑 관리자 비밀번호 입력", type="password", placeholder="비밀번호를 입력하세요")
         if pin == "3060": st.session_state.admin_authenticated = True; st.sidebar.success("관리자 로그인 완료!"); st.rerun()
         elif pin != "": st.sidebar.error("비밀번호가 일치하지 않습니다."); mode = "학생/교사 시간표 보기"
 
@@ -597,7 +597,7 @@ parsed_df = get_latest_updated_timetable(p_df, current_week_dates)
 def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]; periods = list(range(1, 8))
     html = f"<div class='print-title'><h3 style='text-align: center; margin-bottom: 12px;'>🏫 {title_name} 주간 시간표 ({mon_str} ~ {fri_str})</h3></div><div class='table-container'><table class='unified-table'><thead><tr><th style='width:8%;'>교시</th>"
-    for d in days: html += f"<th>{d}<br><span style='font-size:10px; font-weight:normal; color:#e0f2fe;'>({current_week_dates[d].strftime('%m/%d')})</span></th>"
+    for d in days: html += f"<th>{d}<br><span style='font-size:10px; font-weight:normal; color:#94a3b8;'>({current_week_dates[d].strftime('%m/%d')})</span></th>"
     html += "</tr></thead><tbody>"
     sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
     for p in periods:
