@@ -46,7 +46,7 @@
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
-                copiedData = event.data.args.copied_data || null;
+                copiedData = event.data.args.copied_data || null; // 파이썬 세션에서 최신 복사본 로드
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }

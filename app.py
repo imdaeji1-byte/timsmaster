@@ -17,6 +17,11 @@ if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 if "raw_df" not in st.session_state: st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 
+# 콜백 함수 정의 (주차 이동 시 UI 초기화 방지)
+def go_prev_week(): st.session_state.week_offset -= 1
+def go_this_week(): st.session_state.week_offset = 0
+def go_next_week(): st.session_state.week_offset += 1
+
 # A4 인쇄 및 UI 디자인 전용 CSS
 st.markdown("""
 <style>
@@ -24,7 +29,7 @@ st.markdown("""
     @media print {
         @page { size: A4 landscape; margin: 15mm; }
         body { background-color: white !important; zoom: 90%; }
-        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], .stButton, .print-hide { display: none !important; }
+        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], button, .stButton { display: none !important; }
         .main .block-container { padding: 0 !important; max-width: 100% !important; width: 100% !important; }
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         .table-container { box-shadow: none !important; border: 2px solid #000; margin-bottom: 0; }
@@ -58,7 +63,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. ⚡ 초고속 JS 컴포넌트 (모든 팝업과 클립보드를 브라우저 단에서 즉시 처리)
+# 2. ⚡ 초고속 JS 컴포넌트
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -112,7 +117,7 @@ def init_custom_component():
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
-                copiedData = event.data.args.copied_data || null; // 파이썬 세션에서 최신 복사본 로드
+                copiedData = event.data.args.copied_data || null;
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
@@ -189,7 +194,6 @@ def init_custom_component():
             document.getElementById("subPopover").style.display = "none";
         }
 
-        // [복사/붙여넣기 팝업]
         function openPastePopover() {
             hideAllPopups();
             if(!copiedData || !selectedKey) return;
@@ -197,14 +201,12 @@ def init_custom_component():
             positionPopup("pastePopover");
         }
 
-        // [날짜 지정 스마트 교체 (주차 간 교체 지원)]
         function openCrossSwapPopover() {
             hideAllPopups();
             if(!selectedKey) return;
             const t = gridData[selectedKey];
             if(!t.subj) { showToast("⚠️ 빈 셀은 교체할 수 없습니다."); return; }
             document.getElementById("crossSwapPopInfo").innerHTML = `교체 대상: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
-            // 현재 날짜 기본 세팅
             document.getElementById("crossSwapDateInput").value = t.date;
             positionPopup("crossSwapPopover");
         }
@@ -215,7 +217,6 @@ def init_custom_component():
             dispatchAction('REQ_CROSS_SWAP', { s_date: val });
         }
 
-        // [대강 지정 팝업]
         function openSubPopover() {
             hideAllPopups();
             if(!selectedKey) return;
@@ -237,13 +238,9 @@ def init_custom_component():
                 copiedData = t; 
                 showToast(`📋 복사 완료: ${t.subj}(${t.teacher})`);
                 dispatchAction("COPY"); 
-            } else {
-                showToast("⚠️ 빈 셀은 복사 불가");
-                hideAllPopups();
-            }
+            } else { showToast("⚠️ 빈 셀은 복사 불가"); hideAllPopups(); }
         }
 
-        // 서버 전송 로직
         function dispatchAction(act, extraData = {}) {
             hideAllPopups();
             const payload = Object.assign({ action_id: Date.now().toString(), act: act, target: gridData[selectedKey], copiedData: copiedData }, extraData);
@@ -290,7 +287,6 @@ def init_custom_component():
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
-    <!-- 모든 주차에 대응하는 스마트 교체 조회 팝업 -->
     <div id="crossSwapPopover" class="popover">
         <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 날짜 지정 스마트 교체</div>
         <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
@@ -579,18 +575,15 @@ def build_merged_full_grid_html(df_in):
             html += "</tr>"
     return html + "</tbody></table></div>"
 
-# 6. 상단 UI
+# 6. 상단 UI (콜백을 사용하여 주차 이동 시 상태 유지)
 st.markdown(f"<h1 class='print-hide'>📅 {st.session_state.school_name} 시간표 관리 시스템</h1>", unsafe_allow_html=True)
 c_nav1, c_nav2, c_nav3 = st.columns([2, 5, 2])
 with c_nav2:
     col_b1, col_b2, col_b3, col_b4 = st.columns([1, 2.8, 0.9, 1])
-    with col_b1:
-        if st.button("◀ 이전주", use_container_width=True): st.session_state.week_offset -= 1; st.rerun()
+    with col_b1: st.button("◀ 이전주", use_container_width=True, on_click=go_prev_week)
     with col_b2: st.markdown(f"<h4 style='text-align: center; color: #1e3a8a; margin: 0;'>📆 [{mon_str} ~ {fri_str}]</h4>", unsafe_allow_html=True)
-    with col_b3:
-        if st.button("이번주", use_container_width=True): st.session_state.week_offset = 0; st.rerun()
-    with col_b4:
-        if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
+    with col_b3: st.button("이번주", use_container_width=True, on_click=go_this_week)
+    with col_b4: st.button("다음주 ▶", use_container_width=True, on_click=go_next_week)
 
 # [Cross-week] 스마트 교체 파이썬 팝업 연동 UI
 if st.session_state.action_ui is not None:
@@ -659,7 +652,10 @@ if parsed_df is not None and not parsed_df.empty:
             view_mode = st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], horizontal=True, key="view_mode_radio")
         with c_v2: 
             st.write("")
-            st.markdown('<a href="javascript:window.parent.print()" style="display:inline-block; padding:6px 14px; background-color:#2563eb; color:white; border-radius:6px; text-decoration:none; font-weight:bold; width:100%; text-align:center;" class="print-hide">🖨️ 시간표 인쇄 / PDF 저장</a>', unsafe_allow_html=True)
+            # A4 인쇄 기능을 위한 우회 로직 버튼
+            if st.button("🖨️ 시간표 인쇄 / PDF 저장", use_container_width=True):
+                st.toast("💡 인쇄 창이 바로 뜨지 않으면 키보드에서 Ctrl+P (Mac은 Cmd+P)를 눌러주세요!")
+                components.html("<script>try{ window.parent.print(); }catch(e){ window.print(); }</script>", width=0, height=0)
 
         if view_mode == "전체 시간표":
             if is_admin:
