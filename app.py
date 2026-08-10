@@ -25,26 +25,83 @@ def go_prev_week(): st.session_state.week_offset -= 1
 def go_this_week(): st.session_state.week_offset = 0
 def go_next_week(): st.session_state.week_offset += 1
 
-# 2. 파스텔 젤리 알약 & 모바일 최적화 CSS
+# 2. 🖨️ A4 1페이지 출력 완벽 보정 CSS
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
     
+    /* 🖨️ 인쇄 전용 스타일 (첫 페이지 빈 칸 차단 & A4 1장 쏙 맞춤) */
     @media print {
-        @page { size: A4 landscape; margin: 10mm; }
-        body, html { background-color: white !important; zoom: 95%; margin: 0 !important; padding: 0 !important; }
+        @page { size: A4 landscape; margin: 8mm; }
+        
+        html, body {
+            background-color: white !important;
+            zoom: 92%;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            overflow: visible !important;
+        }
+
+        /* 첫 페이지 빈 공간 원인이 되는 숨김 요소들의 여백과 높이를 완전 0으로 제어 */
         header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], 
-        div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], 
-        [data-testid="stAlert"], iframe, .stButton, .print-hide { display: none !important; }
-        .main .block-container { padding: 0 !important; max-width: 100% !important; width: 100% !important; }
-        .table-container { display: block !important; box-shadow: none !important; border: 2px solid #000 !important; }
-        .unified-table th { background-color: #0f172a !important; color: white !important; }
+        [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], 
+        [data-testid="stAlert"], [data-testid="stToastContainer"], iframe, .stButton, .print-hide, h1.print-hide { 
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
+        /* 메인 영역 상단 여백 전면 제거 */
+        .main, .main .block-container, [data-testid="stVerticalBlock"] {
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            gap: 0 !important;
+        }
+
+        /* 타이틀 제목 상단 밀착 */
+        .print-title {
+            display: block !important;
+            margin-top: 0 !important;
+            margin-bottom: 10px !important;
+            padding: 0 !important;
+        }
+        .print-title h3 {
+            font-size: 20px !important;
+            margin: 0 !important;
+            color: #000 !important;
+        }
+
+        /* 표 영역 A4 1페이지 상단 완벽 배치 */
+        .table-container { 
+            display: block !important; 
+            box-shadow: none !important; 
+            border: 2px solid #000 !important; 
+            margin: 0 !important;
+            padding: 2px !important;
+            page-break-before: avoid !important;
+            page-break-inside: avoid !important;
+        }
+        .unified-table { width: 100% !important; border-collapse: separate !important; border-spacing: 2px !important; }
+        .unified-table th { background-color: #f1f5f9 !important; color: #000 !important; border: 1px solid #000 !important; -webkit-print-color-adjust: exact; }
+        .unified-table td { border: 1px solid #64748b !important; height: 50px !important; }
+        .day-col { background-color: #e0f2fe !important; color: #000 !important; -webkit-print-color-adjust: exact; }
+        .period-col { background-color: #f1f5f9 !important; color: #000 !important; -webkit-print-color-adjust: exact; }
+        .bg-substitute { background-color: #ffedd5 !important; -webkit-print-color-adjust: exact; }
+        .bg-swapped { background-color: #fef9c3 !important; -webkit-print-color-adjust: exact; }
+        .badge-sub { background-color: #f97316 !important; color: white !important; -webkit-print-color-adjust: exact; }
+        .badge-swap { background-color: #eab308 !important; color: white !important; -webkit-print-color-adjust: exact; }
     }
     
+    /* 웹 화면 전용 모던 CSS */
     .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 18px; border: 2px solid #f1f5f9; box-shadow: 0 8px 20px rgba(0,0,0,0.03); background: white; padding: 6px; }
     .unified-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; table-layout: fixed; }
-    .unified-table th { background-color: #f8fafc !important; color: #475569 !important; padding: 10px 2px; font-weight: 800; font-size: 13px; border-radius: 10px; }
+    .unified-table th { background-color: #f8fafc !important; color: #475569 !important; padding: 10px 4px; font-weight: 800; font-size: 13px; border-radius: 10px; }
     .unified-table td { background-color: #f8fafc; padding: 6px 1px; border-radius: 10px; vertical-align: middle; height: 58px; word-break: break-all; transition: transform 0.1s ease; }
     
     td.day-col { background-color: #e0f2fe !important; color: #0369a1 !important; font-weight: 800 !important; width: 4% !important; vertical-align: middle !important; border-radius: 10px; padding: 4px 2px !important; }
@@ -55,7 +112,6 @@ st.markdown("""
     .subject-name { font-size: 13.5px !important; font-weight: 800 !important; color: #0f172a !important; line-height: 1.1; letter-spacing: -0.3px; }
     .teacher-name { font-size: 10.5px !important; font-weight: 700 !important; color: #64748b !important; margin-top: 2px; }
     
-    /* 파스텔 연한 바탕색 (테두리 없음) */
     .bg-swapped { background-color: #fef9c3 !important; }
     .bg-substitute { background-color: #ffedd5 !important; }
     
@@ -715,7 +771,7 @@ if parsed_df is not None and not parsed_df.empty:
                         elif act == "SUB_DIRECT" and t_item:
                             sub_t, sub_r = action_result.get("sub_t"), action_result.get("sub_r")
                             if sub_t and sub_r:
-                                save_sub_log({"날짜": t_item["date"], "요일": t_item["day"], "교시": int(t_item["period"]), "학급": t_item["cls"], "원교사": t_item["teacher"], "대강교사": sub_t, "대강사유": sub_r, "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset})
+                                save_sub_log({"날짜": t_item["date"], "요일": t_item["day"], "교시": int(t_item["period"]), "학급": t_cls, "원교사": t_item["teacher"], "대강교사": sub_t, "대강사유": sub_r, "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset})
                                 st.session_state.sub_logs = load_sub_logs()
                                 st.rerun()
 
