@@ -20,23 +20,26 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 2. 🖨️ A4 1페이지 출력 보정 & 🎨 헤더 스티일링 & 🚫 우측 눈모양 버튼만 차단
+# 2. 🖨️ A4 1페이지 출력 보정 & 🎨 헤더 스티일링 & 🚫 모바일/비밀번호 영어 텍스트 차단
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
     
-    /* 🚫 비밀번호 입력창 우측 눈모양 버튼 및 visibility 텍스트 정밀 차단 (라벨은 유지) */
+    /* 🚫 비밀번호 입력창 우측 버튼 및 모바일 사이드바 버튼 글자 투명화 (버튼 기능은 유지) */
     [data-testid="stTextInput"] button,
     [data-testid="stInputVisibilityButton"],
-    [data-testid="stSidebarCollapseButton"] {
-        display: none !important;
-        font-size: 0 !important;
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"] {
         color: transparent !important;
-        visibility: hidden !important;
-        width: 0 !important;
-        height: 0 !important;
-        pointer-events: none !important;
+    }
+    
+    [data-testid="stTextInput"] button svg,
+    [data-testid="stInputVisibilityButton"] svg,
+    [data-testid="stSidebarCollapseButton"] svg,
+    [data-testid="collapsedControl"] svg {
+        fill: #475569 !important;
+        color: #475569 !important;
     }
     
     /* 🎨 비밀번호 라벨 및 입력칸 모던 스타일링 */
@@ -71,11 +74,10 @@ st.markdown("""
         .badge-swap { background-color: #eab308 !important; color: white !important; -webkit-print-color-adjust: exact; }
     }
     
-    /* 🎨 웹 화면 전용 모던 CSS & 시간표 맨 윗줄 헤더 눈 편한 색상으로 롤백 */
+    /* 🎨 웹 화면 전용 모던 CSS & 시간표 맨 윗줄 헤더 눈 편한 색상 */
     .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 18px; border: 2px solid #e2e8f0; box-shadow: 0 8px 20px rgba(0,0,0,0.04); background: white; padding: 6px; }
     .unified-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; table-layout: fixed; }
     
-    /* 🌟 시간표 맨 윗줄(요일/교시/학급명) 부드러운 파스텔톤 배경 */
     .unified-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; font-size: 13.5px; border-radius: 10px; border-bottom: 2px solid #cbd5e1; }
     
     .unified-table td { background-color: #f8fafc; padding: 6px 1px; border-radius: 10px; vertical-align: middle; height: 58px; word-break: break-all; transition: transform 0.1s ease; }
@@ -97,7 +99,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 우클릭 팝업 일체형 UI 컴포넌트
+# 3. ⚡ 우클릭 팝업 일체형 UI 컴포넌트 (모바일 화면 밖 밀림 방지 패치)
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -108,10 +110,9 @@ def init_custom_component():
 <head>
     <meta charset="UTF-8">
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; }
+        body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; overflow-y: hidden; }
         .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
         
-        /* 🌟 JS 관리자 표 맨 윗줄 헤더 부드러운 파스텔톤 배경 */
         .admin-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; border-radius: 10px; font-size: 13.5px; border-bottom: 2px solid #cbd5e1; }
         
         .admin-table td { background-color: #f8fafc; padding: 6px 2px; border-radius: 10px; height: 58px; vertical-align: middle; cursor: pointer; position: relative; }
@@ -132,7 +133,7 @@ def init_custom_component():
         .btn-primary { background: #0284c7; color: white; }
         .btn-swap { background: #eab308; color: white; }
         .btn-close { background: #94a3b8; color: white; margin-top: 6px; }
-        .pop-input { width: 95%; padding: 7px; margin: 5px 0 10px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; }
+        .pop-input { width: 95%; padding: 7px; margin: 5px 0 10px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; box-sizing: border-box; }
         
         #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: none; z-index: 100000; transition: opacity 0.3s; }
     </style>
@@ -208,19 +209,43 @@ def init_custom_component():
             hideAllPopups();
         }
 
+        // 📍 모바일 화면 밖 밀림 방지 스마트 위치 계산 로직
         function positionPopup(popId) {
             const pop = document.getElementById(popId);
             const rect = selectedTdElement.getBoundingClientRect();
+            
+            pop.style.display = "block"; // 화면에 렌더링해야 실제 넓이 측정 가능
+            const popWidth = pop.offsetWidth || 310; 
+            
             let popLeft = rect.left + window.pageXOffset;
             let popTop = rect.bottom + window.pageYOffset + 5;
-            if(popLeft + 290 > window.innerWidth) popLeft = window.innerWidth - 300;
-            pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; pop.style.display = "block";
+            
+            // 화면 오른쪽 밖으로 넘어갈 경우 넓이만큼 왼쪽으로 당기기
+            if(popLeft + popWidth > window.innerWidth + window.pageXOffset) {
+                popLeft = window.innerWidth + window.pageXOffset - popWidth - 15;
+            }
+            
+            // 그래도 왼쪽으로 밀려나가면 10px로 최소 여백 보장
+            if(popLeft < 10) popLeft = 10;
+            
+            pop.style.left = `${popLeft}px`; 
+            pop.style.top = `${popTop}px`; 
         }
 
         function showContextMenu(x, y) {
             const menu = document.getElementById("contextMenu");
             document.getElementById("pasteMenuBtn").style.display = copiedData ? "flex" : "none";
-            menu.style.left = `${x}px`; menu.style.top = `${y}px`; menu.style.display = "block";
+            menu.style.display = "block";
+            
+            const menuWidth = menu.offsetWidth || 200;
+            let popLeft = x;
+            if(x + menuWidth > window.innerWidth + window.pageXOffset) {
+                popLeft = window.innerWidth + window.pageXOffset - menuWidth - 10;
+            }
+            if(popLeft < 10) popLeft = 10;
+            
+            menu.style.left = `${popLeft}px`; 
+            menu.style.top = `${y}px`; 
         }
 
         function hideAllPopups() {
@@ -456,7 +481,8 @@ def save_swap_request(log, auto_approve=True):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     status = 'APPROVED' if auto_approve else 'PENDING'
-    c.execute("INSERT INTO swap_logs (cls1, date1, period1, subj1, teacher1, cls2, date2, period2, subj2, teacher2, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (log["cls1"], log["date1"], log["period1"], log["subj1"], teacher1, log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"], status))
+    # 🚨 DB 에러 핵심 수정 (log["teacher1"] 변수명 누락 복구)
+    c.execute("INSERT INTO swap_logs (cls1, date1, period1, subj1, teacher1, cls2, date2, period2, subj2, teacher2, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (log["cls1"], log["date1"], log["period1"], log["subj1"], log["teacher1"], log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"], status))
     conn.commit()
     conn.close()
 
@@ -495,7 +521,7 @@ def get_week_dates(offset=0):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_dates["금"].strftime("%Y-%m-%d")
 
-# 5. 사이드바 (🚨 진짜 비밀번호 힌트 제거 및 깔끔한 문구 적용)
+# 5. 사이드바 (🚨 비밀번호 노출 방지 및 깔끔한 문구 적용)
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
 mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 if mode == "관리자 모드 (수업교체/대강)":
@@ -737,8 +763,10 @@ if parsed_df is not None and not parsed_df.empty:
                             st.session_state.sub_logs = load_sub_logs()
                             st.rerun()
 
+                        # 🚨 DB 에러 핵심 수정 (t_cls 변수 누락 복구)
                         elif act == "SUB_DIRECT" and t_item:
                             sub_t, sub_r = action_result.get("sub_t"), action_result.get("sub_r")
+                            t_cls = t_item["cls"]
                             if sub_t and sub_r:
                                 save_sub_log({"날짜": t_item["date"], "요일": t_item["day"], "교시": int(t_item["period"]), "학급": t_cls, "원교사": t_item["teacher"], "대강교사": sub_t, "대강사유": sub_r, "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset})
                                 st.session_state.sub_logs = load_sub_logs()

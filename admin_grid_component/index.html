@@ -4,29 +4,32 @@
     <meta charset="UTF-8">
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; }
-        .admin-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
-        .admin-table th { background-color: #1e3a8a; color: #ffffff; padding: 10px 4px; font-weight: bold; border: 1px solid #1e3a8a; border-bottom: 3.5px solid #0f172a; border-right: 3.5px solid #0f172a; }
-        .admin-table td { background-color: #ffffff; padding: 6px 2px; border-right: 3.5px solid #0f172a; border-bottom: 1px solid #cbd5e1; height: 60px; vertical-align: middle; cursor: pointer; position: relative; }
-        .admin-table td:hover { filter: brightness(0.92); outline: 2px solid #2563eb; z-index: 10; }
-        .admin-table td.selected { outline: 3.5px solid #ef4444 !important; background-color: #fef2f2 !important; z-index: 20; }
-        .day-col-js { background-color: #1e3a8a !important; color: #ffffff !important; font-weight: 800; width: 4%; border-right: 3.5px solid #0f172a !important; border-bottom: 3.5px solid #0f172a !important; }
-        .period-col-js { background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b; width: 5%; border-right: 3.5px solid #0f172a !important; }
-        .bg-sub { background-color: #ffedd5 !important; }
-        .bg-swap { background-color: #fef08a !important; }
+        .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
         
-        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }
-        .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
-        .context-menu-item:hover { background-color: #f1f5f9; color: #2563eb; }
+        /* 🌟 JS 관리자 표 맨 윗줄 헤더 부드러운 파스텔톤 배경 */
+        .admin-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; border-radius: 10px; font-size: 13.5px; border-bottom: 2px solid #cbd5e1; }
+        
+        .admin-table td { background-color: #f8fafc; padding: 6px 2px; border-radius: 10px; height: 58px; vertical-align: middle; cursor: pointer; position: relative; }
+        .admin-table td:hover { filter: brightness(0.95); outline: 2px solid #0284c7; }
+        .admin-table td.selected { outline: 3px solid #ef4444 !important; background-color: #fef2f2 !important; }
+        .day-col-js { background-color: #e0f2fe !important; color: #0284c7 !important; font-weight: 800; width: 4%; border-radius: 10px; }
+        .period-col-js { background-color: #f1f5f9 !important; font-weight: 800; color: #475569; width: 5%; border-radius: 10px; }
+        .bg-sub { background-color: #ffedd5 !important; }
+        .bg-swap { background-color: #fef9c3 !important; }
+        
+        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
+        .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 700; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+        .context-menu-item:hover { background-color: #f1f5f9; color: #0284c7; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
         
-        .popover { display: none; position: absolute; background: white; border: 2px solid #2563eb; border-radius: 8px; padding: 12px; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10001; text-align: left; }
-        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 8px; border: none; border-radius: 5px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; }
-        .btn-overwrite { background: #2563eb; color: white; }
-        .btn-swap-paste { background: #eab308; color: white; }
-        .btn-close { background: #94a3b8; color: white; margin-top: 8px; }
-        .pop-input { width: 94%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
+        .popover { display: none; position: absolute; background: white; border: 2.5px solid #0284c7; border-radius: 16px; padding: 14px; width: 280px; box-shadow: 0 12px 30px rgba(0,0,0,0.18); z-index: 10001; text-align: left; }
+        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 9px; border: none; border-radius: 10px; font-weight: bold; font-size: 12.5px; cursor: pointer; text-align: center; }
+        .btn-primary { background: #0284c7; color: white; }
+        .btn-swap { background: #eab308; color: white; }
+        .btn-close { background: #94a3b8; color: white; margin-top: 6px; }
+        .pop-input { width: 95%; padding: 7px; margin: 5px 0 10px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; }
         
-        #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: none; z-index: 100000; transition: opacity 0.3s; }
+        #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: none; z-index: 100000; transition: opacity 0.3s; }
     </style>
     <script>
         function sendMessageToStreamlit(data) {
@@ -67,9 +70,8 @@
             days.forEach(d => {
                 for(let p = 1; p <= 7; p++) {
                     const tr = document.createElement("tr");
-                    if(p === 7) tr.style.borderBottom = "3.5px solid #0f172a";
                     if(p === 1) { const tdDay = document.createElement("td"); tdDay.rowSpan = 7; tdDay.className = "day-col-js"; tdDay.innerHTML = `<b>${d}</b>`; tr.appendChild(tdDay); }
-                    const tdP = document.createElement("td"); tdP.className = "period-col-js"; tdP.innerText = `${p}교시`; tr.appendChild(tdP);
+                    const tdP = document.createElement("td"); tdP.className = "period-col-js"; tdP.innerText = `${p}`; tr.appendChild(tdP);
 
                     classes.forEach(c => {
                         const td = document.createElement("td");
@@ -81,9 +83,9 @@
                         
                         let txt = "-";
                         if(item.subj) {
-                            if(item.is_sub) txt = `<span style="font-size:10px; background:#ea580c; color:white; padding:1px 3px; border-radius:3px;">대강</span><br><b>${item.subj}</b><br>(${item.sub_teacher})`;
-                            else if(item.is_swapped) txt = `<span style="font-size:10px; background:#ca8a04; color:white; padding:1px 3px; border-radius:3px;">교체</span><br><b>${item.subj}</b><br>(${item.teacher})`;
-                            else txt = `<b>${item.subj}</b><br><span style="color:#334155; font-size:12px;">(${item.teacher})</span>`;
+                            if(item.is_sub) txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">대강</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">(${item.sub_teacher})</span>`;
+                            else if(item.is_swapped) txt = `<span style="font-size:9px; background:#eab308; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">변동</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">(${item.teacher})</span>`;
+                            else txt = `<b style="font-size:13.5px; color:#0f172a;">${item.subj}</b><br><span style="color:#64748b; font-size:10.5px; font-weight:600;">(${item.teacher})</span>`;
                         }
                         td.innerHTML = txt;
                         td.onclick = (e) => selectCell(key, td);
@@ -135,15 +137,61 @@
             if(!selectedKey) return;
             const t = gridData[selectedKey];
             if(!t.subj) { showToast("⚠️ 빈 셀은 교체할 수 없습니다."); return; }
-            document.getElementById("crossSwapPopInfo").innerHTML = `교체 대상: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
-            document.getElementById("crossSwapDateInput").value = t.date;
+            document.getElementById("crossSwapPopInfo").innerHTML = `교체 기준: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
+            const dInput = document.getElementById("crossSwapDateInput");
+            dInput.value = t.date;
+            updateSwapCandidates();
             positionPopup("crossSwapPopover");
         }
 
-        function submitCrossSwap() {
-            const val = document.getElementById("crossSwapDateInput").value;
-            if(!val) { showToast("⚠️ 교체할 날짜를 선택하세요."); return; }
-            dispatchAction('REQ_CROSS_SWAP', { s_date: val });
+        function updateSwapCandidates() {
+            const t = gridData[selectedKey];
+            const selDate = document.getElementById("crossSwapDateInput").value;
+            const candSelect = document.getElementById("swapCandidateSelect");
+            candSelect.innerHTML = "";
+            
+            if(!selDate) return;
+            
+            const targetDayNum = new Date(selDate).getDay();
+            if(targetDayNum === 0 || targetDayNum === 6) {
+                candSelect.innerHTML = '<option value="">주말은 선택 불가</option>';
+                return;
+            }
+            
+            const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+            const targetDayKr = dayNames[targetDayNum];
+            
+            const candidates = Object.values(gridData).filter(item => 
+                String(item.cls) === String(t.cls) && 
+                String(item.day) === String(targetDayKr) && 
+                item.subj !== "" && item.subj !== "-"
+            );
+            
+            if(candidates.length === 0) {
+                candSelect.innerHTML = '<option value="">교체 가능한 수업 없음</option>';
+            } else {
+                candidates.forEach(c => {
+                    if(c.date === t.date && c.period === t.period) return;
+                    const opt = document.createElement("option");
+                    opt.value = JSON.stringify({period2: c.period, subj2: c.subj, teacher2: c.teacher});
+                    opt.innerText = `${c.period}교시 - ${c.subj} (${c.teacher})`;
+                    candSelect.appendChild(opt);
+                });
+            }
+        }
+
+        function submitSmartSwap() {
+            const dateVal = document.getElementById("crossSwapDateInput").value;
+            const candVal = document.getElementById("swapCandidateSelect").value;
+            if(!candVal) { showToast("⚠️ 교체할 수업을 선택하세요."); return; }
+            
+            const target2 = JSON.parse(candVal);
+            dispatchAction('EXECUTE_CROSS_SWAP', {
+                s_date2: dateVal,
+                period2: target2.period2,
+                subj2: target2.subj2,
+                teacher2: target2.teacher2
+            });
         }
 
         function openSubPopover() {
@@ -204,36 +252,40 @@
         <div class="context-menu-item" onclick="copyCurrentCell()">📋 수업 복사 (Ctrl+C)</div>
         <div id="pasteMenuBtn" class="context-menu-item" style="display:none;" onclick="openPastePopover()">📥 붙여넣기 (이동/교체)</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="openCrossSwapPopover()">🔄 날짜 지정 스마트 교체</div>
+        <div class="context-menu-item" onclick="openCrossSwapPopover()">🔄 팝업 일체형 수업 교체</div>
         <div class="context-menu-item" onclick="openSubPopover()">📝 스마트 대강 지정</div>
     </div>
     
     <div id="pastePopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
         <div id="pastePopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
-        <button class="pop-btn btn-overwrite" onclick="dispatchAction('PASTE_OVERWRITE')">1. 수업 이동 (덮어쓰기)</button>
-        <button class="pop-btn btn-swap-paste" onclick="dispatchAction('PASTE_SWAP')">2. 맞교환 (서로 교체)</button>
+        <button class="pop-btn btn-primary" onclick="dispatchAction('PASTE_OVERWRITE')">1. 수업 이동 (덮어쓰기)</button>
+        <button class="pop-btn btn-swap" onclick="dispatchAction('PASTE_SWAP')">2. 맞교환 (서로 교체)</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
-    <!-- 모든 주차에 대응하는 스마트 교체 조회 팝업 -->
     <div id="crossSwapPopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 날짜 지정 스마트 교체</div>
-        <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
-        <label style="font-size:11px; font-weight:bold;">교체할 날짜 선택 (모든 주차 가능):</label>
-        <input type="date" id="crossSwapDateInput" class="pop-input">
-        <button class="pop-btn btn-swap-paste" onclick="submitCrossSwap()">이동/교체 대상 조회</button>
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">🔄 스마트 수업 교체</div>
+        <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
+        
+        <label style="font-size:11px; font-weight:bold; color:#334155;">1. 교체할 날짜 선택:</label>
+        <input type="date" id="crossSwapDateInput" class="pop-input" onchange="updateSwapCandidates()">
+        
+        <label style="font-size:11px; font-weight:bold; color:#334155;">2. 교체 대상 수업 선택:</label>
+        <select id="swapCandidateSelect" class="pop-input"></select>
+        
+        <button class="pop-btn btn-swap" onclick="submitSmartSwap()">✅ 맞교환 즉시 확정</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
     <div id="subPopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📝 스마트 대강 지정</div>
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">📝 스마트 대강 지정</div>
         <div id="subPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
         <label style="font-size:11px; font-weight:bold;">대강 사유:</label>
         <input type="text" id="subReasonInput" class="pop-input" placeholder="출장, 공결 등">
         <label style="font-size:11px; font-weight:bold;">가능한 교사:</label>
         <select id="subTeacherSelect" class="pop-input"></select>
-        <button class="pop-btn btn-overwrite" onclick="dispatchAction('SUB_DIRECT', {sub_t: document.getElementById('subTeacherSelect').value, sub_r: document.getElementById('subReasonInput').value})">대강 저장 적용</button>
+        <button class="pop-btn btn-primary" onclick="dispatchAction('SUB_DIRECT', {sub_t: document.getElementById('subTeacherSelect').value, sub_r: document.getElementById('subReasonInput').value})">대강 저장 적용</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 </body>
