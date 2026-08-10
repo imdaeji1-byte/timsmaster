@@ -23,8 +23,7 @@ if "raw_df" not in st.session_state:
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
 
-# 2. 공식 Streamlit 양방향 Custom Component 생성 엔진 (핵심 해결책)
-# URL 조작 우회를 막고 JS -> Python 다이렉트 통신을 위한 로컬 HTML 컴포넌트 자동 생성
+# 2. 공식 Streamlit 커스텀 컴포넌트 생성 (JS -> Python 다이렉트 통신)
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -35,7 +34,7 @@ def init_custom_component():
 <head>
     <meta charset="UTF-8">
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; }
+        body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; }
         .admin-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
         .admin-table th { background-color: #1e3a8a; color: #ffffff; padding: 10px 4px; font-weight: bold; border: 1px solid #1e3a8a; border-bottom: 3.5px solid #0f172a; border-right: 3.5px solid #0f172a; }
         .admin-table td { background-color: #ffffff; padding: 6px 2px; border-right: 3.5px solid #0f172a; border-bottom: 1px solid #cbd5e1; height: 60px; vertical-align: middle; cursor: pointer; position: relative; }
@@ -45,16 +44,18 @@ def init_custom_component():
         .period-col-js { background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b; width: 5%; border-right: 3.5px solid #0f172a !important; }
         .bg-sub { background-color: #ffedd5 !important; }
         .bg-swap { background-color: #fef08a !important; }
-        .context-menu { display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }
+        
+        /* 커스텀 메뉴 및 셀밀착 모달 CSS */
+        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }
         .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
         .context-menu-item:hover { background-color: #f1f5f9; color: #2563eb; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left; }
-        .modal-btn { display: block; width: 100%; margin: 8px 0; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; }
+        
+        .paste-popover { display: none; position: absolute; background: white; border: 2px solid #2563eb; border-radius: 8px; padding: 12px; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10001; text-align: left; }
+        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 8px; border: none; border-radius: 5px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; }
         .btn-overwrite { background: #2563eb; color: white; }
         .btn-swap-paste { background: #eab308; color: white; }
-        .btn-close { background: #94a3b8; color: white; margin-top: 15px; }
+        .btn-close { background: #94a3b8; color: white; margin-top: 8px; }
     </style>
     <script>
         function sendMessageToStreamlit(type, data) {
@@ -71,6 +72,7 @@ def init_custom_component():
         let classes = [];
         let copiedData = null;
         let selectedKey = null;
+        let selectedTdElement = null;
         const days = ["월", "화", "수", "목", "금"];
 
         window.addEventListener("message", function(event) {
@@ -80,7 +82,7 @@ def init_custom_component():
                 classes = event.data.args.classes;
                 copiedData = event.data.args.copied_data;
                 renderGrid();
-                setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 30), 100);
+                setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 50), 100);
             }
         });
 
@@ -125,7 +127,7 @@ def init_custom_component():
                         }
                         td.innerHTML = txt;
                         td.onclick = (e) => selectCell(key, td);
-                        td.oncontextmenu = (e) => { e.preventDefault(); selectCell(key, td); showContextMenu(e.clientX, e.clientY); };
+                        td.oncontextmenu = (e) => { e.preventDefault(); selectCell(key, td); showContextMenu(e.pageX, e.pageY); };
                         tr.appendChild(td);
                     });
                     tbody.appendChild(tr);
@@ -136,8 +138,10 @@ def init_custom_component():
         function selectCell(key, element) {
             document.querySelectorAll(".admin-table td").forEach(td => td.classList.remove("selected"));
             selectedKey = key;
+            selectedTdElement = element;
             if(element) element.classList.add("selected");
             hideContextMenu();
+            hidePastePopover();
         }
 
         function showContextMenu(x, y) {
@@ -151,32 +155,58 @@ def init_custom_component():
 
         function hideContextMenu() { document.getElementById("contextMenu").style.display = "none"; }
 
-        function openPasteModal() {
-            if(!copiedData || !selectedKey) return;
+        // 셀 바로 위에 밀착 노출되는 팝업 위치 제어 함수
+        function openPastePopover() {
+            if(!copiedData || !selectedKey || !selectedTdElement) return;
             const target = gridData[selectedKey];
-            document.getElementById("pasteModalInfo").innerHTML = `복사된 수업: <b>${copiedData.subj} (${copiedData.teacher})</b><br>붙여넣을 대상: <b>[${target.cls}] ${target.day}요일 ${target.period}교시</b>`;
-            document.getElementById("pasteModal").style.display = "flex";
+            const pop = document.getElementById("pastePopover");
+            const info = document.getElementById("pastePopInfo");
+            
+            info.innerHTML = `복사: <b>${copiedData.subj}(${copiedData.teacher})</b><br>대상: <b>[${target.cls}] ${target.day} ${target.period}교시</b>`;
+            
+            const rect = selectedTdElement.getBoundingClientRect();
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            let popLeft = rect.left + scrollLeft;
+            let popTop = rect.bottom + scrollTop + 5;
+            
+            if(popLeft + 290 > window.innerWidth) { popLeft = window.innerWidth - 300; }
+            
+            pop.style.left = `${popLeft}px`;
+            pop.style.top = `${popTop}px`;
+            pop.style.display = "block";
         }
 
-        function closePasteModal() { document.getElementById("pasteModal").style.display = "none"; }
+        function hidePastePopover() { document.getElementById("pastePopover").style.display = "none"; }
 
         function onMenuAction(actionType) {
             hideContextMenu();
-            closePasteModal();
+            hidePastePopover();
             if(!selectedKey || !gridData[selectedKey]) return;
-            // 파이썬으로 다이렉트 데이터 전송!
+            
+            if(actionType === 'COPY') {
+                copiedData = gridData[selectedKey];
+                Streamlit.setComponentValue({ act: 'COPY', target: copiedData });
+                return;
+            }
             Streamlit.setComponentValue({ act: actionType, target: gridData[selectedKey] });
         }
 
-        window.onclick = (e) => { if(!e.target.closest("#contextMenu")) hideContextMenu(); };
+        window.onclick = (e) => { 
+            if(!e.target.closest("#contextMenu") && !e.target.closest("#pastePopover")) {
+                hideContextMenu();
+                hidePastePopover();
+            } 
+        };
 
         window.addEventListener("keydown", (e) => {
             if(!selectedKey) return;
             if(e.key === "Delete" || e.key === "Backspace") { onMenuAction("DELETE"); }
             else if(e.ctrlKey && e.key === "c") { onMenuAction("COPY"); }
             else if(e.ctrlKey && e.key === "v") {
-                if(copiedData) openPasteModal();
-                else alert("⚠️ 복사된 데이터가 없습니다. 먼저 셀을 선택하고 Ctrl+C를 누르세요.");
+                if(copiedData) openPastePopover();
+                else Streamlit.setComponentValue({ act: 'NO_COPY_DATA', target: null });
             }
         });
     </script>
@@ -186,21 +216,22 @@ def init_custom_component():
         <thead><tr id="grid-head-tr"></tr></thead>
         <tbody id="grid-body"></tbody>
     </table>
+    
     <div id="contextMenu" class="context-menu">
-        <div class="context-menu-item" onclick="onMenuAction('DELETE')">🗑️ 수업 삭제 (휴강)</div>
+        <div class="context-menu-item" onclick="onMenuAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" onclick="onMenuAction('COPY')">📋 수업 복사 (Ctrl+C)</div>
         <div id="pasteOverwriteItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_OVERWRITE')">📥 복사본 덮어쓰기</div>
         <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 복사본과 맞교환</div>
     </div>
-    <div id="pasteModal" class="modal-overlay">
-        <div class="modal-content">
-            <h4 style="margin-top:0; color:#1e3a8a;">📋 붙여넣기 방식 선택</h4>
-            <p id="pasteModalInfo" style="font-size:13px; color:#475569;"></p>
-            <button class="modal-btn btn-overwrite" onclick="onMenuAction('PASTE_OVERWRITE')">1. 덮어쓰기 (기존 수업 제거 후 배치)</button>
-            <button class="modal-btn btn-swap-paste" onclick="onMenuAction('PASTE_SWAP')">2. 교체하기 (원래 수업과 서로 교환)</button>
-            <button class="modal-btn btn-close" onclick="closePasteModal()">취소</button>
-        </div>
+    
+    <!-- 셀 밀착형 붙여넣기 메뉴 팝업 -->
+    <div id="pastePopover" class="paste-popover">
+        <div style="font-weight:bold; color:#1e3a8a; font-size:13px; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
+        <div id="pastePopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
+        <button class="pop-btn btn-overwrite" onclick="onMenuAction('PASTE_OVERWRITE')">1. 덮어쓰기 (기존 수업 제거 후 배치)</button>
+        <button class="pop-btn btn-swap-paste" onclick="onMenuAction('PASTE_SWAP')">2. 교체하기 (원래 수업과 서로 교환)</button>
+        <button class="pop-btn btn-close" onclick="hidePastePopover()">취소</button>
     </div>
 </body>
 </html>"""
@@ -210,7 +241,7 @@ def init_custom_component():
 
 AdminGrid = init_custom_component()
 
-# 3. DB 초기화 및 관리
+# 3. DB 연동 및 로드
 DB_FILE = "timemaster_data.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -281,7 +312,7 @@ if mode == "관리자 모드 (수업교체/대강)":
             st.sidebar.error("비밀번호가 일치하지 않습니다.")
             mode = "학생/교사 시간표 보기"
 
-# 5. 기초 데이터 로드 및 적용
+# 5. 기초 데이터 로드 및 파싱
 DEFAULT_EXCEL = "2026년 2학기 시간표.xlsx"
 if st.session_state.raw_df is None and os.path.exists(DEFAULT_EXCEL):
     st.session_state.raw_df = pd.read_excel(DEFAULT_EXCEL)
@@ -341,15 +372,14 @@ with c_mid:
     with col_b4:
         if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
 
-# 6. 메인 UI 및 양방향 통신 핸들러 (코드 하이라이트!)
+# 6. 메인 UI 및 이벤트 동기화 처리기
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     tab1, tab2 = st.tabs(["🗓️ 통합 시간표 관리", "🔄 교환/대강/통계"])
 
     with tab1:
-        st.info("💡 **가이드**: 셀 클릭 후 Delete(삭제), Ctrl+C(복사), Ctrl+V(붙여넣기) 및 마우스 우클릭 스마트 메뉴 지원")
+        st.info("💡 **가이드**: 셀 선택 후 Delete(삭제), Ctrl+C(복사), Ctrl+V(붙여넣기) 및 마우스 우클릭 기능 이용 가능")
         
-        # 데이터를 딕셔너리로 래핑해서 JS로 전송
         days = ["월", "화", "수", "목", "금"]
         classes = sorted(parsed_df["학급"].unique())
         sub_dict = {(log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs}
@@ -364,14 +394,23 @@ if parsed_df is not None and not parsed_df.empty:
                         row = cell.iloc[0]
                         sub_key = (date_str, c, p)
                         is_sub = sub_key in sub_dict
+                        
+                        # 대강 기록 중 관리자 삭제(빈칸) 항목 처리
+                        sub_teacher_val = sub_dict[sub_key]['대강교사'] if is_sub else ""
+                        subj_val = row["과목"]
+                        teacher_val = row["교사"]
+                        if is_sub and sub_teacher_val == "빈칸":
+                            subj_val = ""
+                            teacher_val = ""
+
                         grid_data[key] = {
-                            "date": date_str, "day": d, "cls": c, "period": p, "subj": row["과목"], "teacher": row["교사"],
-                            "sub_teacher": sub_dict[sub_key]['대강교사'] if is_sub else "", "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub
+                            "date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val,
+                            "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub
                         }
                     else:
                         grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-        # ⚡ 핵심: JS 컴포넌트 렌더링 및 데이터 수신 ⚡
+        # JS Custom Component 렌더링
         action_result = AdminGrid(grid_data=grid_data, classes=classes, copied_data=st.session_state.copied_data, key=f"grid_{st.session_state.grid_key}")
 
         if action_result:
@@ -379,33 +418,48 @@ if parsed_df is not None and not parsed_df.empty:
             t_item = action_result.get("target")
             c_item = st.session_state.copied_data
             
-            t_date = t_item.get("date")
-            t_cls = t_item.get("cls")
-            t_period = int(t_item.get("period"))
-            t_subj = t_item.get("subj")
-            t_teacher = t_item.get("teacher")
+            if act == "NO_COPY_DATA":
+                st.toast("⚠️ 복사된 수업 데이터가 없습니다. 먼저 셀을 선택하고 Ctrl+C를 누르세요.")
 
-            if act == "COPY":
-                st.session_state.copied_data = t_item
-                st.session_state.grid_key += 1
-                st.rerun()
+            elif act == "COPY" and t_item:
+                if t_item.get("subj"):
+                    st.session_state.copied_data = t_item
+                    st.toast(f"📋 [{t_item.get('subj')}({t_item.get('teacher')})] 수업이 복사되었습니다.")
+                else:
+                    st.toast("⚠️ 빈 셀은 복사할 수 없습니다.")
 
-            elif act == "DELETE":
+            elif act == "DELETE" and t_item:
+                t_date, t_cls, t_period = t_item.get("date"), t_item.get("cls"), int(t_item.get("period"))
                 day_kr = ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()]
-                save_sub_log({"날짜": t_date, "요일": day_kr, "교시": t_period, "학급": t_cls, "원교사": t_teacher, "대강교사": "휴강", "대강사유": "관리자 삭제", "단가": 0, "주차": st.session_state.week_offset})
+                
+                # 빈칸으로 깨끗하게 삭제 처리
+                save_sub_log({"날짜": t_date, "요일": day_kr, "교시": t_period, "학급": t_cls, "원교사": t_item.get("teacher"), "대강교사": "빈칸", "대강사유": "관리자 삭제", "단가": 0, "주차": st.session_state.week_offset})
                 st.session_state.sub_logs = load_sub_logs()
                 st.session_state.grid_key += 1
+                st.toast(f"🗑️ [{t_cls}] {t_period}교시 수업 삭제(빈칸) 완료")
                 st.rerun()
 
-            elif act == "PASTE_OVERWRITE" and c_item:
+            elif act in ["PASTE_OVERWRITE", "PASTE_SWAP"] and c_item and t_item:
+                t_date, t_cls, t_period = t_item.get("date"), t_item.get("cls"), int(t_item.get("period"))
                 day_kr = ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()]
-                save_sub_log({"날짜": t_date, "요일": day_kr, "교시": t_period, "학급": t_cls, "원교사": t_teacher, "대강교사": c_item["teacher"], "대강사유": f"복사({c_item['subj']})", "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset})
-                st.session_state.sub_logs = load_sub_logs()
-                st.session_state.grid_key += 1
-                st.rerun()
+                c_teacher = c_item.get("teacher")
+                c_subj = c_item.get("subj")
 
-            elif act == "PASTE_SWAP" and c_item:
-                save_swap_request({"cls1": c_item["cls"], "date1": c_item["date"], "period1": c_item["period"], "subj1": c_item["subj"], "teacher1": c_item["teacher"], "cls2": t_cls, "date2": t_date, "period2": t_period, "subj2": t_subj, "teacher2": t_teacher}, auto_approve=True)
-                st.session_state.swap_logs = load_swap_logs("APPROVED")
-                st.session_state.grid_key += 1
-                st.rerun()
+                # 중복검증: 대상 시간대/요일에 복사하려는 교사의 다른 수업이 이미 존재하는지 확인
+                conflict = parsed_df[(parsed_df["교사"] == c_teacher) & (parsed_df["요일"] == day_kr) & (parsed_df["교시"] == t_period) & (parsed_df["학급"] != t_cls)]
+                
+                if not conflict.empty:
+                    conflict_cls = conflict.iloc[0]["학급"]
+                    st.toast(f"⚠️ 중복입니다! {c_teacher} 선생님은 {day_kr}요일 {t_period}교시 [{conflict_cls}]에 이미 수업이 있습니다.")
+                else:
+                    if act == "PASTE_OVERWRITE":
+                        save_sub_log({"날짜": t_date, "요일": day_kr, "교시": t_period, "학급": t_cls, "원교사": t_item.get("teacher"), "대강교사": c_teacher, "대강사유": f"복사({c_subj})", "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset})
+                        st.session_state.sub_logs = load_sub_logs()
+                        st.toast(f"📥 [{t_cls}] {t_period}교시에 [{c_subj}({c_teacher})] 덮어쓰기 완료")
+                    elif act == "PASTE_SWAP":
+                        save_swap_request({"cls1": c_item["cls"], "date1": c_item["date"], "period1": c_item["period"], "subj1": c_item["subj"], "teacher1": c_teacher, "cls2": t_cls, "date2": t_date, "period2": t_period, "subj2": t_item.get("subj"), "teacher2": t_item.get("teacher")}, auto_approve=True)
+                        st.session_state.swap_logs = load_swap_logs("APPROVED")
+                        st.toast(f"🔀 [{c_item['cls']}] {c_item['period']}교시 ↔ [{t_cls}] {t_period}교시 맞교환 완료")
+                    
+                    st.session_state.grid_key += 1
+                    st.rerun()
