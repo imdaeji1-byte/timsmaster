@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 from datetime import datetime, timedelta, date
 
 # 1. 페이지 기본 설정 및 세션 초기화
-st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
+st.set_page_config(page_title="TimeMaster - 모던 시간표 시스템", layout="wide")
 
 if "copied_data" not in st.session_state: st.session_state.copied_data = None
 if "last_action_id" not in st.session_state: st.session_state.last_action_id = None
@@ -17,65 +17,57 @@ if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 if "raw_df" not in st.session_state: st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 
-# [상태 보존용 변수] 주차 이동 시 학급/교사 뷰가 풀리지 않도록 강력 고정
 if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# A4 인쇄 완벽 대응 및 UI 디자인 CSS
+def go_prev_week(): st.session_state.week_offset -= 1
+def go_this_week(): st.session_state.week_offset = 0
+def go_next_week(): st.session_state.week_offset += 1
+
+# 2. 파스텔 젤리 알약 & 모바일 최적화 CSS
 st.markdown("""
 <style>
-    /* 🖨️ A4 가로 인쇄 최적화 (모든 껍데기 숨기고 시간표만 출력) */
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
+    
     @media print {
         @page { size: A4 landscape; margin: 10mm; }
         body, html { background-color: white !important; zoom: 95%; margin: 0 !important; padding: 0 !important; }
-        
-        /* 불필요한 모든 Streamlit 껍데기, 메뉴, 알림창 완전 차단 */
         header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], 
-        [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], 
-        [data-testid="stSelectbox"], [data-testid="stHorizontalBlock"], [data-testid="stAlert"], 
-        [data-testid="stToastContainer"], iframe, .stButton, .hide-on-print { 
-            display: none !important; 
-        }
-
-        /* 메인 컨테이너 여백 100% 활용 */
-        .main .block-container { padding: 0 !important; max-width: 100% !important; width: 100% !important; margin-top: 0 !important; }
-        
-        /* 표 인쇄 최적화 */
-        .table-container { display: block !important; box-shadow: none !important; border: 2px solid #000 !important; page-break-inside: avoid; margin-top: 10px; }
-        .unified-table { width: 100% !important; border-collapse: collapse !important; }
-        .unified-table th { background-color: #1e3a8a !important; color: white !important; border: 1px solid #334155 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .unified-table td { border: 1px solid #64748b !important; }
-        .day-col { background-color: #1e3a8a !important; color: white !important; -webkit-print-color-adjust: exact; }
-        .period-col { background-color: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
-        .bg-substitute { background-color: #ffedd5 !important; -webkit-print-color-adjust: exact; }
-        .bg-swapped { background-color: #fef08a !important; -webkit-print-color-adjust: exact; }
-        .badge-sub { background-color: #ea580c !important; color: white !important; -webkit-print-color-adjust: exact; }
-        .badge-swap { background-color: #ca8a04 !important; color: white !important; -webkit-print-color-adjust: exact; }
+        div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], 
+        [data-testid="stAlert"], iframe, .stButton, .print-hide { display: none !important; }
+        .main .block-container { padding: 0 !important; max-width: 100% !important; width: 100% !important; }
+        .table-container { display: block !important; box-shadow: none !important; border: 2px solid #000 !important; }
+        .unified-table th { background-color: #0f172a !important; color: white !important; }
     }
     
-    /* 웹 화면 전용 CSS */
-    .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
-    .unified-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; background-color: #ffffff !important; table-layout: fixed; }
-    .unified-table th { background-color: #1e3a8a !important; color: #ffffff !important; padding: 10px 4px; font-weight: bold; font-size: 14px; border: 1px solid #1e3a8a; border-bottom: 3.5px solid #0f172a !important; border-right: 3.5px solid #0f172a !important; }
-    .unified-table td { background-color: #ffffff !important; padding: 8px 2px; border-right: 3.5px solid #0f172a !important; border-left: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; vertical-align: middle; height: 60px; word-break: break-all; }
-    td.day-col { background-color: #1e3a8a !important; color: #ffffff !important; font-weight: 800 !important; width: 4% !important; vertical-align: middle !important; border-right: 3.5px solid #0f172a !important; border-bottom: 3.5px solid #0f172a !important; padding: 4px 2px !important; }
-    .day-col b { color: #ffffff !important; font-size: 18px !important; display: block !important; }
-    .day-col span { color: #f1f5f9 !important; font-size: 12px !important; font-weight: 700 !important; display: block !important; }
-    .period-col { background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b !important; width: 5% !important; font-size: 13px; border-right: 3.5px solid #0f172a !important; }
-    .subject-name { font-size: 14px !important; font-weight: 800 !important; color: #0f172a !important; line-height: 1.2; }
-    .teacher-name { font-size: 12px !important; font-weight: 700 !important; color: #334155 !important; margin-top: 2px; }
-    .bg-swapped { background-color: #fef08a !important; border: 2px solid #eab308 !important; }
-    .bg-substitute { background-color: #ffedd5 !important; border: 2px solid #f97316 !important; }
-    .status-badge { font-size: 10px; padding: 2px 4px; border-radius: 4px; font-weight: bold; display: inline-block; margin-bottom: 2px; }
-    .badge-swap { background-color: #ca8a04 !important; color: white !important; }
-    .badge-sub { background-color: #ea580c !important; color: white !important; }
-    tr.day-border-bottom td { border-bottom: 3.5px solid #0f172a !important; }
-    .action-panel { border: 2px solid #1e3a8a; border-radius: 8px; padding: 15px; background: #eff6ff; margin-bottom: 15px; }
+    .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 18px; border: 2px solid #f1f5f9; box-shadow: 0 8px 20px rgba(0,0,0,0.03); background: white; padding: 6px; }
+    .unified-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; table-layout: fixed; }
+    .unified-table th { background-color: #f8fafc !important; color: #475569 !important; padding: 10px 2px; font-weight: 800; font-size: 13px; border-radius: 10px; }
+    .unified-table td { background-color: #f8fafc; padding: 6px 1px; border-radius: 10px; vertical-align: middle; height: 58px; word-break: break-all; transition: transform 0.1s ease; }
+    
+    td.day-col { background-color: #e0f2fe !important; color: #0369a1 !important; font-weight: 800 !important; width: 4% !important; vertical-align: middle !important; border-radius: 10px; padding: 4px 2px !important; }
+    .day-col b { font-size: 16px !important; display: block !important; color: #0284c7 !important; }
+    .day-col span { font-size: 10px !important; font-weight: 700 !important; display: block !important; color: #38bdf8 !important; }
+    .period-col { background-color: #f1f5f9 !important; font-weight: 800; color: #475569 !important; width: 5% !important; font-size: 12px; border-radius: 10px; }
+    
+    .subject-name { font-size: 13.5px !important; font-weight: 800 !important; color: #0f172a !important; line-height: 1.1; letter-spacing: -0.3px; }
+    .teacher-name { font-size: 10.5px !important; font-weight: 700 !important; color: #64748b !important; margin-top: 2px; }
+    
+    /* 파스텔 연한 바탕색 (테두리 없음) */
+    .bg-swapped { background-color: #fef9c3 !important; }
+    .bg-substitute { background-color: #ffedd5 !important; }
+    
+    .status-badge { font-size: 9px; padding: 1px 5px; border-radius: 8px; font-weight: 800; display: inline-block; margin-bottom: 2px; }
+    .badge-swap { background-color: #eab308 !important; color: white !important; }
+    .badge-sub { background-color: #f97316 !important; color: white !important; }
+    
+    .action-panel { border: 2px solid #bae6fd; border-radius: 16px; padding: 15px; background: #f0f9ff; margin-bottom: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
-# 2. ⚡ 초고속 JS 컴포넌트 (모든 팝업과 클립보드를 브라우저 단에서 즉시 처리)
+# 3. ⚡ 모던 JS 컴포넌트
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -87,29 +79,29 @@ def init_custom_component():
     <meta charset="UTF-8">
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; }
-        .admin-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
-        .admin-table th { background-color: #1e3a8a; color: #ffffff; padding: 10px 4px; font-weight: bold; border: 1px solid #1e3a8a; border-bottom: 3.5px solid #0f172a; border-right: 3.5px solid #0f172a; }
-        .admin-table td { background-color: #ffffff; padding: 6px 2px; border-right: 3.5px solid #0f172a; border-bottom: 1px solid #cbd5e1; height: 60px; vertical-align: middle; cursor: pointer; position: relative; }
-        .admin-table td:hover { filter: brightness(0.92); outline: 2px solid #2563eb; z-index: 10; }
-        .admin-table td.selected { outline: 3.5px solid #ef4444 !important; background-color: #fef2f2 !important; z-index: 20; }
-        .day-col-js { background-color: #1e3a8a !important; color: #ffffff !important; font-weight: 800; width: 4%; border-right: 3.5px solid #0f172a !important; border-bottom: 3.5px solid #0f172a !important; }
-        .period-col-js { background-color: #f1f5f9 !important; font-weight: bold; color: #1e293b; width: 5%; border-right: 3.5px solid #0f172a !important; }
+        .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
+        .admin-table th { background-color: #f8fafc; color: #475569; padding: 10px 4px; font-weight: 800; border-radius: 10px; }
+        .admin-table td { background-color: #f8fafc; padding: 6px 2px; border-radius: 10px; height: 58px; vertical-align: middle; cursor: pointer; position: relative; }
+        .admin-table td:hover { filter: brightness(0.95); outline: 2px solid #3b82f6; }
+        .admin-table td.selected { outline: 3px solid #ef4444 !important; background-color: #fef2f2 !important; }
+        .day-col-js { background-color: #e0f2fe !important; color: #0284c7 !important; font-weight: 800; width: 4%; border-radius: 10px; }
+        .period-col-js { background-color: #f1f5f9 !important; font-weight: 800; color: #475569; width: 5%; border-radius: 10px; }
         .bg-sub { background-color: #ffedd5 !important; }
-        .bg-swap { background-color: #fef08a !important; }
+        .bg-swap { background-color: #fef9c3 !important; }
         
-        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }
-        .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
+        .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 700; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
         .context-menu-item:hover { background-color: #f1f5f9; color: #2563eb; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
         
-        .popover { display: none; position: absolute; background: white; border: 2px solid #2563eb; border-radius: 8px; padding: 12px; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10001; text-align: left; }
-        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 8px; border: none; border-radius: 5px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; }
+        .popover { display: none; position: absolute; background: white; border: 2px solid #3b82f6; border-radius: 14px; padding: 12px; width: 270px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 10001; text-align: left; }
+        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 8px; border: none; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; }
         .btn-overwrite { background: #2563eb; color: white; }
         .btn-swap-paste { background: #eab308; color: white; }
         .btn-close { background: #94a3b8; color: white; margin-top: 8px; }
-        .pop-input { width: 94%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
+        .pop-input { width: 94%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }
         
-        #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: none; z-index: 100000; transition: opacity 0.3s; }
+        #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: none; z-index: 100000; transition: opacity 0.3s; }
     </style>
     <script>
         function sendMessageToStreamlit(data) {
@@ -150,9 +142,8 @@ def init_custom_component():
             days.forEach(d => {
                 for(let p = 1; p <= 7; p++) {
                     const tr = document.createElement("tr");
-                    if(p === 7) tr.style.borderBottom = "3.5px solid #0f172a";
                     if(p === 1) { const tdDay = document.createElement("td"); tdDay.rowSpan = 7; tdDay.className = "day-col-js"; tdDay.innerHTML = `<b>${d}</b>`; tr.appendChild(tdDay); }
-                    const tdP = document.createElement("td"); tdP.className = "period-col-js"; tdP.innerText = `${p}교시`; tr.appendChild(tdP);
+                    const tdP = document.createElement("td"); tdP.className = "period-col-js"; tdP.innerText = `${p}`; tr.appendChild(tdP);
 
                     classes.forEach(c => {
                         const td = document.createElement("td");
@@ -164,9 +155,9 @@ def init_custom_component():
                         
                         let txt = "-";
                         if(item.subj) {
-                            if(item.is_sub) txt = `<span style="font-size:10px; background:#ea580c; color:white; padding:1px 3px; border-radius:3px;">대강</span><br><b>${item.subj}</b><br>(${item.sub_teacher})`;
-                            else if(item.is_swapped) txt = `<span style="font-size:10px; background:#ca8a04; color:white; padding:1px 3px; border-radius:3px;">교체</span><br><b>${item.subj}</b><br>(${item.teacher})`;
-                            else txt = `<b>${item.subj}</b><br><span style="color:#334155; font-size:12px;">(${item.teacher})</span>`;
+                            if(item.is_sub) txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">대강</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">(${item.sub_teacher})</span>`;
+                            else if(item.is_swapped) txt = `<span style="font-size:9px; background:#eab308; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">변동</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">(${item.teacher})</span>`;
+                            else txt = `<b style="font-size:13.5px; color:#0f172a;">${item.subj}</b><br><span style="color:#64748b; font-size:10.5px; font-weight:600;">(${item.teacher})</span>`;
                         }
                         td.innerHTML = txt;
                         td.onclick = (e) => selectCell(key, td);
@@ -189,7 +180,7 @@ def init_custom_component():
             const rect = selectedTdElement.getBoundingClientRect();
             let popLeft = rect.left + window.pageXOffset;
             let popTop = rect.bottom + window.pageYOffset + 5;
-            if(popLeft + 290 > window.innerWidth) popLeft = window.innerWidth - 300;
+            if(popLeft + 280 > window.innerWidth) popLeft = window.innerWidth - 290;
             pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; pop.style.display = "block";
         }
 
@@ -299,7 +290,6 @@ def init_custom_component():
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
-    <!-- 모든 주차에 대응하는 스마트 교체 조회 팝업 -->
     <div id="crossSwapPopover" class="popover">
         <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 날짜 지정 스마트 교체</div>
         <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
@@ -327,7 +317,7 @@ def init_custom_component():
 
 AdminGrid = init_custom_component()
 
-# 3. DB 초기화 및 관리
+# 4. DB 초기화 및 관리
 DB_FILE = "timemaster_data.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -425,7 +415,7 @@ def get_week_dates_from_date(target_date):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_dates["금"].strftime("%Y-%m-%d")
 
-# 4. 사이드바
+# 5. 사이드바
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
 mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 if mode == "관리자 모드 (수업교체/대강)":
@@ -434,7 +424,7 @@ if mode == "관리자 모드 (수업교체/대강)":
         if pin == "3060": st.session_state.admin_authenticated = True; st.sidebar.success("관리자 로그인 완료!"); st.rerun()
         elif pin != "": st.sidebar.error("비밀번호가 일치하지 않습니다."); mode = "학생/교사 시간표 보기"
 
-# 5. 파싱 및 병합
+# 6. 파싱 및 병합
 DEFAULT_EXCEL = "2026년 2학기 시간표.xlsx"
 if st.session_state.raw_df is None and os.path.exists(DEFAULT_EXCEL): st.session_state.raw_df = pd.read_excel(DEFAULT_EXCEL)
 
@@ -527,7 +517,7 @@ parsed_df = get_latest_updated_timetable(p_df, current_week_dates)
 def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]; periods = list(range(1, 8))
     html = f"<div class='print-title'><h3 style='text-align: center; margin-bottom: 12px;'>🏫 {title_name} 주간 시간표 ({mon_str} ~ {fri_str})</h3></div><div class='table-container'><table class='unified-table'><thead><tr><th style='width:8%;'>교시</th>"
-    for d in days: html += f"<th>{d} ({current_week_dates[d].strftime('%m/%d')})</th>"
+    for d in days: html += f"<th>{d}<br><span style='font-size:10px; font-weight:normal; color:#94a3b8;'>({current_week_dates[d].strftime('%m/%d')})</span></th>"
     html += "</tr></thead><tbody>"
     sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
     for p in periods:
@@ -569,7 +559,7 @@ def build_merged_full_grid_html(df_in):
     for d in days:
         date_str = current_week_dates[d].strftime("%Y-%m-%d")
         for p in range(1, 8):
-            html += f"<tr class='{'day-border-bottom' if p == 7 else ''}'>"
+            html += f"<tr>"
             if p == 1: html += f"<td rowspan='7' class='day-col'><b>{d}</b><span>({current_week_dates[d].strftime('%m/%d')})</span></td>"
             html += f"<td class='period-col'>{p}교시</td>"
             for c in classes:
@@ -588,20 +578,20 @@ def build_merged_full_grid_html(df_in):
             html += "</tr>"
     return html + "</tbody></table></div>"
 
-# 6. 상단 UI (인쇄 시 숨겨짐)
+# 7. 상단 UI
 st.markdown(f"<h1 class='print-hide'>📅 {st.session_state.school_name} 시간표 관리 시스템</h1>", unsafe_allow_html=True)
 c_nav1, c_nav2, c_nav3 = st.columns([2, 5, 2])
 with c_nav2:
     col_b1, col_b2, col_b3, col_b4 = st.columns([1, 2.8, 0.9, 1])
     with col_b1: 
         if st.button("◀ 이전주", use_container_width=True): st.session_state.week_offset -= 1; st.rerun()
-    with col_b2: st.markdown(f"<h4 class='print-hide' style='text-align: center; color: #1e3a8a; margin: 0;'>📆 [{mon_str} ~ {fri_str}]</h4>", unsafe_allow_html=True)
+    with col_b2: st.markdown(f"<h4 class='print-hide' style='text-align: center; color: #0284c7; margin: 0;'>📆 [{mon_str} ~ {fri_str}]</h4>", unsafe_allow_html=True)
     with col_b3: 
         if st.button("이번주", use_container_width=True): st.session_state.week_offset = 0; st.rerun()
     with col_b4: 
         if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
 
-# [Cross-week] 스마트 교체 파이썬 팝업 연동 UI (인쇄 시 숨겨짐)
+# [Cross-week] 스마트 교체 파이썬 팝업 연동 UI
 if st.session_state.action_ui is not None:
     ui = st.session_state.action_ui
     if ui["type"] == "SWAP_DATE_SELECT":
@@ -656,7 +646,7 @@ if st.session_state.action_ui is not None:
                     st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-# 7. 메인 화면 렌더링
+# 8. 메인 화면 렌더링
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     if is_admin: tab1, tab2, tab3 = st.tabs(["🗓️ 시간표 스마트 통합 관리", "🔄 교체 요청 대기(승인)", "📊 대강일지 및 통계"])
@@ -668,15 +658,14 @@ if parsed_df is not None and not parsed_df.empty:
             view_opts = ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"]
             view_idx = view_opts.index(st.session_state.view_mode_val) if st.session_state.view_mode_val in view_opts else 0
             view_mode = st.radio("조회 방식", view_opts, index=view_idx, horizontal=True)
-            st.session_state.view_mode_val = view_mode # 상태 유지 업데이트
+            st.session_state.view_mode_val = view_mode
         with c_v2: 
             st.write("")
-            # A4 인쇄 우회 컴포넌트 삽입
             components.html(
                 """
                 <style>
-                    button { width: 100%; padding: 8px 14px; background-color: #2563eb; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-family: sans-serif; font-size: 14px; transition: background-color 0.2s; }
-                    button:hover { background-color: #1d4ed8; }
+                    button { width: 100%; padding: 8px 14px; background-color: #0284c7; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-family: sans-serif; font-size: 13.5px; }
+                    button:hover { background-color: #0369a1; }
                 </style>
                 <button onclick="window.parent.print()">🖨️ 시간표 인쇄 / PDF 저장</button>
                 """, height=45
@@ -702,7 +691,6 @@ if parsed_df is not None and not parsed_df.empty:
                                 grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
                             else: grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-                # ⚡ 초고속 JS 컴포넌트 호출
                 action_result = AdminGrid(grid_data=grid_data, classes=classes, teacher_list=teacher_list, copied_data=st.session_state.copied_data, key="admin_grid_fast")
 
                 if action_result:
@@ -756,13 +744,13 @@ if parsed_df is not None and not parsed_df.empty:
             cls_opts = sorted(parsed_df["학급"].unique())
             idx = cls_opts.index(st.session_state.sel_cls_val) if st.session_state.sel_cls_val in cls_opts else 0
             target_cls = st.selectbox("🎯 학급 선택", cls_opts, index=idx)
-            st.session_state.sel_cls_val = target_cls # 상태 유지
+            st.session_state.sel_cls_val = target_cls
             st.markdown(build_weekly_html_table(parsed_df, target_cls, "CLASS"), unsafe_allow_html=True)
         else: 
             t_opts = teacher_list
             idx = t_opts.index(st.session_state.sel_t_val) if st.session_state.sel_t_val in t_opts else 0
             target_t = st.selectbox("👨‍🏫 교사 선택", t_opts, index=idx)
-            st.session_state.sel_t_val = target_t # 상태 유지
+            st.session_state.sel_t_val = target_t
             st.markdown(build_weekly_html_table(parsed_df, target_t, "TEACHER"), unsafe_allow_html=True)
 
     with tab2:
