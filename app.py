@@ -112,7 +112,7 @@ def init_custom_component():
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
-                copiedData = event.data.args.copied_data || null;
+                copiedData = event.data.args.copied_data || null; // 파이썬 세션에서 최신 복사본 로드
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
@@ -581,7 +581,7 @@ def build_merged_full_grid_html(df_in):
 
 # 6. 상단 UI
 st.markdown(f"<h1 class='print-hide'>📅 {st.session_state.school_name} 시간표 관리 시스템</h1>", unsafe_allow_html=True)
-c_nav1, c_nav2, c_nav3 = st.columns([2, 5, 2], elem_classes="print-hide")
+c_nav1, c_nav2, c_nav3 = st.columns([2, 5, 2])
 with c_nav2:
     col_b1, col_b2, col_b3, col_b4 = st.columns([1, 2.8, 0.9, 1])
     with col_b1:
@@ -605,11 +605,9 @@ if st.session_state.action_ui is not None:
         
         if target_day_kr in ["토", "일"]: st.error("주말은 교체할 수 없습니다.")
         else:
-            # 타겟 주차의 시간표 생성
             t_week_dates = get_week_dates_from_date(target_date)
             t_df = get_latest_updated_timetable(p_df, t_week_dates)
             
-            # 충돌 없는 교체 가능한 수업 선별 로직 (다른 주차 간 완벽 검증)
             valid_options = []
             cls_df = t_df[(t_df["학급"] == ui["target"]["cls"]) & (t_df["요일"] == target_day_kr)]
             
@@ -619,7 +617,6 @@ if st.session_state.action_ui is not None:
                 if row["과목"] == "" or row["과목"] == "-": continue
                 
                 c1 = t_df[(t_df["교사"] == ui["target"]["teacher"]) & (t_df["요일"] == target_day_kr) & (t_df["교시"] == r_period) & (t_df["학급"] != ui["target"]["cls"])]
-                # 원본 수업 주차의 시간표에서 타겟 교사가 비어있는지 확인
                 c2 = parsed_df[(parsed_df["교사"] == row["교사"]) & (parsed_df["요일"] == ui["target"]["day"]) & (parsed_df["교시"] == int(ui["target"]["period"])) & (parsed_df["학급"] != ui["target"]["cls"])]
                 
                 if c1.empty and c2.empty:
@@ -657,13 +654,12 @@ if parsed_df is not None and not parsed_df.empty:
     else: tab1, tab2 = st.tabs(["🗓️ 시간표 조회", "🔄 날짜 지정 기반 수업 맞교환 신청"])
 
     with tab1:
-        c_v1, c_v2 = st.columns([3, 1], elem_classes="print-hide")
+        c_v1, c_v2 = st.columns([3, 1])
         with c_v1: 
             view_mode = st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], horizontal=True, key="view_mode_radio")
         with c_v2: 
             st.write("")
-            # A4 인쇄용 네이티브 버튼 (JS iframe 우회)
-            st.markdown('<a href="javascript:window.parent.print()" style="display:inline-block; padding:6px 14px; background-color:#2563eb; color:white; border-radius:6px; text-decoration:none; font-weight:bold; width:100%; text-align:center;">🖨️ 시간표 인쇄 / PDF 저장</a>', unsafe_allow_html=True)
+            st.markdown('<a href="javascript:window.parent.print()" style="display:inline-block; padding:6px 14px; background-color:#2563eb; color:white; border-radius:6px; text-decoration:none; font-weight:bold; width:100%; text-align:center;" class="print-hide">🖨️ 시간표 인쇄 / PDF 저장</a>', unsafe_allow_html=True)
 
         if view_mode == "전체 시간표":
             if is_admin:
@@ -714,7 +710,6 @@ if parsed_df is not None and not parsed_df.empty:
                                 st.session_state.sub_logs = load_sub_logs()
                                 st.rerun()
 
-                        # JS에서 날짜를 고르면 스트림릿 UI로 넘김
                         elif act == "REQ_CROSS_SWAP" and t_item:
                             st.session_state.action_ui = {"type": "SWAP_DATE_SELECT", "target": t_item, "s_date": action_result.get("s_date")}
                             st.rerun()
@@ -737,12 +732,10 @@ if parsed_df is not None and not parsed_df.empty:
                 st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
 
         elif view_mode == "학급별 주간 시간표": 
-            # Key 속성을 사용해 주차 이동 시에도 학급/교사가 유지되도록 변경
             st.markdown(build_weekly_html_table(parsed_df, st.selectbox("🎯 학급 선택", sorted(parsed_df["학급"].unique()), key="target_cls_select"), "CLASS"), unsafe_allow_html=True)
         else: 
             st.markdown(build_weekly_html_table(parsed_df, st.selectbox("👨‍🏫 교사 선택", teacher_list, key="target_t_select"), "TEACHER"), unsafe_allow_html=True)
 
-    # 비관리자용/관리자용 교체 요청 탭 로직 분리
     with tab2:
         if is_admin:
             st.subheader("📥 [관리자] 대기 중인 수업 교체 승인 대기열")
