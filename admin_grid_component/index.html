@@ -14,17 +14,17 @@
         .bg-sub { background-color: #ffedd5 !important; }
         .bg-swap { background-color: #fef08a !important; }
         
-        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
+        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; z-index: 10000; padding: 6px 0; text-align: left; }
         .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
         .context-menu-item:hover { background-color: #f1f5f9; color: #2563eb; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
         
-        .popover { display: none; position: absolute; background: white; border: 2px solid #2563eb; border-radius: 8px; padding: 12px; width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10001; text-align: left; }
+        .popover { display: none; position: absolute; background: white; border: 2px solid #2563eb; border-radius: 8px; padding: 12px; width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10001; text-align: left; }
         .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 8px; border: none; border-radius: 5px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; }
         .btn-overwrite { background: #2563eb; color: white; }
         .btn-swap-paste { background: #eab308; color: white; }
         .btn-close { background: #94a3b8; color: white; margin-top: 8px; }
-        .pop-input { width: 92%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
+        .pop-input { width: 94%; padding: 6px; margin: 4px 0 8px 0; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
         
         #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: none; z-index: 100000; transition: opacity 0.3s; }
     </style>
@@ -46,7 +46,7 @@
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
-                copiedData = event.data.args.copied_data || null; // 추가
+                copiedData = event.data.args.copied_data || null; // 파이썬 세션에서 최신 복사본 로드
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
@@ -106,7 +106,7 @@
             const rect = selectedTdElement.getBoundingClientRect();
             let popLeft = rect.left + window.pageXOffset;
             let popTop = rect.bottom + window.pageYOffset + 5;
-            if(popLeft + 290 > window.innerWidth) popLeft = window.innerWidth - 300;
+            if(popLeft + 290 > window.innerWidth) popLeft = window.innerWidth - 320;
             pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; pop.style.display = "block";
         }
 
@@ -123,6 +123,7 @@
             document.getElementById("subPopover").style.display = "none";
         }
 
+        // [복사/붙여넣기 팝업]
         function openPastePopover() {
             hideAllPopups();
             if(!copiedData || !selectedKey) return;
@@ -130,15 +131,46 @@
             positionPopup("pastePopover");
         }
 
+        // [스마트 교체 팝업 - 현재 주차 내에서 충돌 없는 수업만 필터링]
         function openSwapPopover() {
             hideAllPopups();
             if(!selectedKey) return;
             const t = gridData[selectedKey];
-            if(!t.subj) { showToast("⚠️ 빈 셀은 지정 교체할 수 없습니다."); return; }
+            if(!t.subj) { showToast("⚠️ 빈 셀은 교체 기준이 될 수 없습니다."); return; }
             document.getElementById("swapPopInfo").innerHTML = `대상: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
+            
+            const sel = document.getElementById("swapTargetSelect");
+            sel.innerHTML = "";
+            let validCount = 0;
+
+            // 교체 가능한 수업 선별 로직 (시수 충돌 원천 차단)
+            Object.values(gridData).forEach(item => {
+                if(item.cls === t.cls && item.subj && (item.day !== t.day || item.period !== t.period)) {
+                    const c1 = Object.values(gridData).find(x => x.teacher === t.teacher && x.day === item.day && x.period === item.period && x.cls !== t.cls);
+                    const c2 = Object.values(gridData).find(x => x.teacher === item.teacher && x.day === t.day && x.period === t.period && x.cls !== item.cls);
+                    
+                    if(!c1 && !c2) {
+                        const opt = document.createElement("option");
+                        opt.value = item.date + "|" + item.period; 
+                        opt.innerText = `[${item.day} ${item.period}교시] ${item.subj}(${item.teacher})`;
+                        sel.appendChild(opt);
+                        validCount++;
+                    }
+                }
+            });
+
+            if(validCount === 0) sel.innerHTML = '<option value="">가능한 수업 없음</option>';
             positionPopup("swapPopover");
         }
 
+        function submitSwap() {
+            const val = document.getElementById("swapTargetSelect").value;
+            if(!val) { showToast("⚠️ 교체 대상을 선택하세요."); return; }
+            const parts = val.split("|");
+            dispatchAction('SWAP_DIRECT', { s_date: parts[0], s_period: parts[1] });
+        }
+
+        // [대강 지정 팝업]
         function openSubPopover() {
             hideAllPopups();
             if(!selectedKey) return;
@@ -154,6 +186,18 @@
             positionPopup("subPopover");
         }
 
+        function copyCurrentCell() {
+            const t = gridData[selectedKey];
+            if(t && t.subj) {
+                copiedData = t; 
+                showToast(`📋 복사 완료: ${t.subj}(${t.teacher})`);
+                dispatchAction("COPY"); // 서버 세션 동기화 (주차 이동 대비)
+            } else {
+                showToast("⚠️ 빈 셀은 복사 불가");
+                hideAllPopups();
+            }
+        }
+
         // 서버 전송 로직
         function dispatchAction(act, extraData = {}) {
             hideAllPopups();
@@ -166,15 +210,11 @@
         window.addEventListener("keydown", (e) => {
             if(!selectedKey) return;
             if(e.key === "Delete" || e.key === "Backspace") {
-                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; 
+                selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; // 초고속 빈칸 처리
                 showToast("🗑️ 삭제 완료");
                 dispatchAction("DELETE");
             }
-            else if(e.ctrlKey && e.key === "c") {
-                const t = gridData[selectedKey];
-                if(t.subj) { copiedData = t; showToast(`📋 복사 완료: ${t.subj}(${t.teacher})`); }
-                else { showToast("⚠️ 빈 셀은 복사 불가"); }
-            }
+            else if(e.ctrlKey && e.key === "c") { copyCurrentCell(); }
             else if(e.ctrlKey && e.key === "v") {
                 if(copiedData) openPastePopover();
                 else showToast("⚠️ 복사된 데이터가 없습니다.");
@@ -190,11 +230,11 @@
     
     <div id="contextMenu" class="context-menu">
         <div class="context-menu-item" onclick="dispatchAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
-        <div class="context-menu-item" onclick="copiedData=gridData[selectedKey]; showToast('📋 복사 완료'); hideAllPopups();">📋 수업 복사 (Ctrl+C)</div>
+        <div class="context-menu-item" onclick="copyCurrentCell()">📋 수업 복사 (Ctrl+C)</div>
         <div id="pasteMenuBtn" class="context-menu-item" style="display:none;" onclick="openPastePopover()">📥 붙여넣기 (이동/교체)</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="openSwapPopover()">🔄 날짜/교시 지정 교체</div>
-        <div class="context-menu-item" onclick="openSubPopover()">📝 대강 교사 지정</div>
+        <div class="context-menu-item" onclick="openSwapPopover()">🔄 이번주 내 수업 교체</div>
+        <div class="context-menu-item" onclick="openSubPopover()">📝 스마트 대강 지정</div>
     </div>
     
     <div id="pastePopover" class="popover">
@@ -206,18 +246,16 @@
     </div>
 
     <div id="swapPopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 수업 직접 교체</div>
+        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 이번주 내 스마트 교체</div>
         <div id="swapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
-        <label style="font-size:11px; font-weight:bold;">교체 대상 날짜:</label>
-        <input type="date" id="swapDateInput" class="pop-input">
-        <label style="font-size:11px; font-weight:bold;">교시:</label>
-        <select id="swapPeriodInput" class="pop-input"><option value="1">1교시</option><option value="2">2교시</option><option value="3">3교시</option><option value="4">4교시</option><option value="5">5교시</option><option value="6">6교시</option><option value="7">7교시</option></select>
-        <button class="pop-btn btn-swap-paste" onclick="dispatchAction('SWAP_DIRECT', {s_date: document.getElementById('swapDateInput').value, s_period: document.getElementById('swapPeriodInput').value})">이 시간의 수업과 교체</button>
+        <label style="font-size:11px; font-weight:bold;">교체 가능한 수업 목록 (충돌 자동제외):</label>
+        <select id="swapTargetSelect" class="pop-input"></select>
+        <button class="pop-btn btn-swap-paste" onclick="submitSwap()">선택한 수업과 교체</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
     <div id="subPopover" class="popover">
-        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📝 대강 지정</div>
+        <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">📝 스마트 대강 지정</div>
         <div id="subPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
         <label style="font-size:11px; font-weight:bold;">대강 사유:</label>
         <input type="text" id="subReasonInput" class="pop-input" placeholder="출장, 공결 등">
