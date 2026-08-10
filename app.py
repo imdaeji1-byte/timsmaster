@@ -25,12 +25,27 @@ def go_prev_week(): st.session_state.week_offset -= 1
 def go_this_week(): st.session_state.week_offset = 0
 def go_next_week(): st.session_state.week_offset += 1
 
-# 2. 🖨️ A4 1페이지 출력 완벽 보정 CSS
+# 2. 🖨️ A4 1페이지 출력 보정 & 🚫 아이콘 텍스트 노출 차단 CSS
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
     
+    /* 🚫 Streamlit 아이콘 폰트 깨짐(visibility, keyboard_double 등) 완전 숨김 패치 */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stInputVisibilityButton"],
+    [data-testid="stInputVisibilityButton"] *,
+    button[aria-label="Expand sidebar"],
+    button[aria-label="Collapse sidebar"] {
+        display: none !important;
+        font-size: 0 !important;
+        color: transparent !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+
     /* 🖨️ 인쇄 전용 스타일 (첫 페이지 빈 칸 차단 & A4 1장 쏙 맞춤) */
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
@@ -44,7 +59,6 @@ st.markdown("""
             overflow: visible !important;
         }
 
-        /* 첫 페이지 빈 공간 원인이 되는 숨김 요소들의 여백과 높이를 완전 0으로 제어 */
         header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], 
         [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], 
         [data-testid="stAlert"], [data-testid="stToastContainer"], iframe, .stButton, .print-hide, h1.print-hide { 
@@ -55,7 +69,6 @@ st.markdown("""
             border: none !important;
         }
 
-        /* 메인 영역 상단 여백 전면 제거 */
         .main, .main .block-container, [data-testid="stVerticalBlock"] {
             padding: 0 !important;
             margin: 0 !important;
@@ -64,7 +77,6 @@ st.markdown("""
             gap: 0 !important;
         }
 
-        /* 타이틀 제목 상단 밀착 */
         .print-title {
             display: block !important;
             margin-top: 0 !important;
@@ -77,7 +89,6 @@ st.markdown("""
             color: #000 !important;
         }
 
-        /* 표 영역 A4 1페이지 상단 완벽 배치 */
         .table-container { 
             display: block !important; 
             box-shadow: none !important; 
@@ -120,11 +131,7 @@ st.markdown("""
     .badge-sub { background-color: #f97316 !important; color: white !important; }
     
     .action-panel { border: 2px solid #bae6fd; border-radius: 16px; padding: 15px; background: #f0f9ff; margin-bottom: 15px; }
-/* 아이콘 텍스트 깨짐 숨김 */
-    [data-testid="stSidebarCollapseButton"],
-    [data-testid="stInputVisibilityButton"] {
-        display: none !important;
-    }</style>
+</style>
 """, unsafe_allow_html=True)
 
 # 3. ⚡ 모던 JS 컴포넌트
