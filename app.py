@@ -20,28 +20,34 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 2. 🖨️ A4 1페이지 출력 보정 & 🚫 visibility 텍스트 완벽 제거 CSS
+# 2. 🖨️ A4 1페이지 출력 보정 & 🎨 헤더 스티일링 & 🚫 우측 눈모양 버튼만 차단
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
     
-    /* 🚫 비밀번호 입력창 내부 우측 버튼 및 visibility 텍스트 강제 박멸 */
-    [data-testid="stTextInput"] div[aria-hidden="true"],
-    [data-testid="stTextInput"] button,
-    [data-testid="stTextInput"] span,
-    [data-testid="stSidebarCollapseButton"] {
+    /* 🚫 비밀번호 입력창 우측 우측 눈모양 버튼 및 아이콘 텍스트만 정밀 차단 */
+    [data-testid="stTextInput"] div[aria-hidden="true"] {
         display: none !important;
-        opacity: 0 !important;
-        visibility: hidden !important;
-        width: 0 !important;
-        height: 0 !important;
         font-size: 0 !important;
         color: transparent !important;
-        pointer-events: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+    }
+    
+    /* 🎨 비밀번호 라벨 및 입력칸 모던 스타일ing */
+    [data-testid="stTextInput"] label {
+        font-weight: 800 !important;
+        color: #0f172a !important;
+        font-size: 14px !important;
+        margin-bottom: 6px !important;
+    }
+    
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
     }
 
-    /* 🖨️ 인쇄 전용 스타일 (이하 기존 코드) */
+    /* 🖨️ 인쇄 전용 스타일 */
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
         html, body { background-color: white !important; zoom: 92%; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
@@ -55,7 +61,7 @@ st.markdown("""
         .print-title h3 { font-size: 20px !important; margin: 0 !important; color: #000 !important; }
         .table-container { display: block !important; box-shadow: none !important; border: 2px solid #000 !important; margin: 0 !important; padding: 2px !important; page-break-before: avoid !important; page-break-inside: avoid !important; }
         .unified-table { width: 100% !important; border-collapse: separate !important; border-spacing: 2px !important; }
-        .unified-table th { background-color: #f1f5f9 !important; color: #000 !important; border: 1px solid #000 !important; -webkit-print-color-adjust: exact; }
+        .unified-table th { background-color: #38bdf8 !important; color: #000 !important; border: 1px solid #000 !important; -webkit-print-color-adjust: exact; }
         .unified-table td { border: 1px solid #64748b !important; height: 50px !important; }
         .day-col { background-color: #e0f2fe !important; color: #000 !important; -webkit-print-color-adjust: exact; }
         .period-col { background-color: #f1f5f9 !important; color: #000 !important; -webkit-print-color-adjust: exact; }
@@ -65,15 +71,18 @@ st.markdown("""
         .badge-swap { background-color: #eab308 !important; color: white !important; -webkit-print-color-adjust: exact; }
     }
     
-    /* 웹 화면 전용 모던 CSS */
-    .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 18px; border: 2px solid #f1f5f9; box-shadow: 0 8px 20px rgba(0,0,0,0.03); background: white; padding: 6px; }
+    /* 🎨 웹 화면 전용 모던 CSS & 맨 윗줄 헤더 색상 포인트 강조 */
+    .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 18px; border: 2px solid #e2e8f0; box-shadow: 0 8px 20px rgba(0,0,0,0.04); background: white; padding: 6px; }
     .unified-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; table-layout: fixed; }
-    .unified-table th { background-color: #f8fafc !important; color: #475569 !important; padding: 10px 4px; font-weight: 800; font-size: 13px; border-radius: 10px; }
+    
+    /* 🌟 시간표 맨 윗줄(요일/교시/학급명) 강조 배경색 변경 */
+    .unified-table th { background-color: #0284c7 !important; color: #ffffff !important; padding: 11px 4px; font-weight: 800; font-size: 13.5px; border-radius: 10px; letter-spacing: -0.3px; }
+    
     .unified-table td { background-color: #f8fafc; padding: 6px 1px; border-radius: 10px; vertical-align: middle; height: 58px; word-break: break-all; transition: transform 0.1s ease; }
     
     td.day-col { background-color: #e0f2fe !important; color: #0369a1 !important; font-weight: 800 !important; width: 4% !important; vertical-align: middle !important; border-radius: 10px; padding: 4px 2px !important; }
     .day-col b { font-size: 16px !important; display: block !important; color: #0284c7 !important; }
-    .day-col span { font-size: 10px !important; font-weight: 700 !important; display: block !important; color: #38bdf8 !important; }
+    .day-col span { font-size: 10px !important; font-weight: 700 !important; display: block !important; color: #0284c7 !important; }
     .period-col { background-color: #f1f5f9 !important; font-weight: 800; color: #475569 !important; width: 5% !important; font-size: 12px; border-radius: 10px; }
     
     .subject-name { font-size: 13.5px !important; font-weight: 800 !important; color: #0f172a !important; line-height: 1.1; letter-spacing: -0.3px; }
@@ -101,9 +110,12 @@ def init_custom_component():
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; }
         .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
-        .admin-table th { background-color: #f8fafc; color: #475569; padding: 10px 4px; font-weight: 800; border-radius: 10px; }
+        
+        /* 🌟 JS 관리자 표 맨 윗줄 헤더 강조 색상 변경 */
+        .admin-table th { background-color: #0284c7 !important; color: #ffffff !important; padding: 11px 4px; font-weight: 800; border-radius: 10px; font-size: 13.5px; }
+        
         .admin-table td { background-color: #f8fafc; padding: 6px 2px; border-radius: 10px; height: 58px; vertical-align: middle; cursor: pointer; position: relative; }
-        .admin-table td:hover { filter: brightness(0.95); outline: 2px solid #3b82f6; }
+        .admin-table td:hover { filter: brightness(0.95); outline: 2px solid #0284c7; }
         .admin-table td.selected { outline: 3px solid #ef4444 !important; background-color: #fef2f2 !important; }
         .day-col-js { background-color: #e0f2fe !important; color: #0284c7 !important; font-weight: 800; width: 4%; border-radius: 10px; }
         .period-col-js { background-color: #f1f5f9 !important; font-weight: 800; color: #475569; width: 5%; border-radius: 10px; }
@@ -112,10 +124,9 @@ def init_custom_component():
         
         .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
         .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 700; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
-        .context-menu-item:hover { background-color: #f1f5f9; color: #2563eb; }
+        .context-menu-item:hover { background-color: #f1f5f9; color: #0284c7; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
         
-        /* 팝업 일체형 디자인 */
         .popover { display: none; position: absolute; background: white; border: 2.5px solid #0284c7; border-radius: 16px; padding: 14px; width: 280px; box-shadow: 0 12px 30px rgba(0,0,0,0.18); z-index: 10001; text-align: left; }
         .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 9px; border: none; border-radius: 10px; font-weight: bold; font-size: 12.5px; cursor: pointer; text-align: center; }
         .btn-primary { background: #0284c7; color: white; }
@@ -226,7 +237,6 @@ def init_custom_component():
             positionPopup("pastePopover");
         }
 
-        /* 📍 팝업 내부 스마트 날짜 기반 후보 자동 추출 */
         function openCrossSwapPopover() {
             hideAllPopups();
             if(!selectedKey) return;
@@ -247,7 +257,7 @@ def init_custom_component():
             
             if(!selDate) return;
             
-            const targetDayNum = new Date(selDate).getDay(); // 0:일, 6:토
+            const targetDayNum = new Date(selDate).getDay();
             if(targetDayNum === 0 || targetDayNum === 6) {
                 candSelect.innerHTML = '<option value="">주말은 선택 불가</option>';
                 return;
@@ -256,7 +266,6 @@ def init_custom_component():
             const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
             const targetDayKr = dayNames[targetDayNum];
             
-            // 해당 날짜 동일 학급 수업 검색
             const candidates = Object.values(gridData).filter(item => 
                 String(item.cls) === String(t.cls) && 
                 String(item.day) === String(targetDayKr) && 
@@ -267,7 +276,7 @@ def init_custom_component():
                 candSelect.innerHTML = '<option value="">교체 가능한 수업 없음</option>';
             } else {
                 candidates.forEach(c => {
-                    if(c.date === t.date && c.period === t.period) return; // 자기 자신 제외
+                    if(c.date === t.date && c.period === t.period) return;
                     const opt = document.createElement("option");
                     opt.value = JSON.stringify({period2: c.period, subj2: c.subj, teacher2: c.teacher});
                     opt.innerText = `${c.period}교시 - ${c.subj} (${c.teacher})`;
@@ -360,7 +369,6 @@ def init_custom_component():
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
-    <!-- 📍 팝업 내부 통합 수업 교체 창 -->
     <div id="crossSwapPopover" class="popover">
         <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">🔄 스마트 수업 교체</div>
         <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
@@ -487,12 +495,12 @@ def get_week_dates(offset=0):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_dates["금"].strftime("%Y-%m-%d")
 
-# 5. 사이드바
+# 5. 사이드바 (비밀번호 입력칸 라벨 및 placeholder 복원)
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
 mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 if mode == "관리자 모드 (수업교체/대강)":
     if not st.session_state.admin_authenticated:
-        pin = st.sidebar.text_input("관리자 비밀번호 입력", type="password")
+        pin = st.sidebar.text_input("🔑 관리자 비밀번호 입력", type="password", placeholder="비밀번호 입력 (예: 3060)")
         if pin == "3060": st.session_state.admin_authenticated = True; st.sidebar.success("관리자 로그인 완료!"); st.rerun()
         elif pin != "": st.sidebar.error("비밀번호가 일치하지 않습니다."); mode = "학생/교사 시간표 보기"
 
@@ -589,7 +597,7 @@ parsed_df = get_latest_updated_timetable(p_df, current_week_dates)
 def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]; periods = list(range(1, 8))
     html = f"<div class='print-title'><h3 style='text-align: center; margin-bottom: 12px;'>🏫 {title_name} 주간 시간표 ({mon_str} ~ {fri_str})</h3></div><div class='table-container'><table class='unified-table'><thead><tr><th style='width:8%;'>교시</th>"
-    for d in days: html += f"<th>{d}<br><span style='font-size:10px; font-weight:normal; color:#94a3b8;'>({current_week_dates[d].strftime('%m/%d')})</span></th>"
+    for d in days: html += f"<th>{d}<br><span style='font-size:10px; font-weight:normal; color:#e0f2fe;'>({current_week_dates[d].strftime('%m/%d')})</span></th>"
     html += "</tr></thead><tbody>"
     sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
     for p in periods:
@@ -736,7 +744,6 @@ if parsed_df is not None and not parsed_df.empty:
                                 st.session_state.sub_logs = load_sub_logs()
                                 st.rerun()
 
-                        # 📍 팝업 내부 교체 실행 액션 처리
                         elif act == "EXECUTE_CROSS_SWAP" and t_item:
                             s_date2 = action_result.get("s_date2")
                             period2 = int(action_result.get("period2"))
