@@ -26,18 +26,22 @@ st.markdown("""
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
     
-    /* 🚫 visibility / keyboard_double 텍스트 노출 완벽 박멸 패치 */
-    div[data-testid="stInputVisibilityButton"],
-    div[data-testid="stInputVisibilityButton"] *,
-    button[aria-label="Visibility"],
+    /* 🚫 비밀번호 입력창 내부 우측 버튼 및 visibility 텍스트 강제 박멸 */
+    [data-testid="stTextInput"] div[aria-hidden="true"],
+    [data-testid="stTextInput"] button,
+    [data-testid="stTextInput"] span,
     [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
         font-size: 0 !important;
         color: transparent !important;
-        visibility: hidden !important;
-        display: none !important;
+        pointer-events: none !important;
     }
 
-    /* 🖨️ 인쇄 전용 스타일 */
+    /* 🖨️ 인쇄 전용 스타일 (이하 기존 코드) */
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
         html, body { background-color: white !important; zoom: 92%; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
