@@ -5,13 +5,11 @@ import os
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta, date
 
-# 1. 페이지 설정 및 세션 초기화
+# 1. 페이지 기본 설정 및 세션 초기화
 st.set_page_config(page_title="TimeMaster - 학교 시간표 시스템", layout="wide")
 
 if "copied_data" not in st.session_state:
     st.session_state.copied_data = None
-if "grid_key" not in st.session_state:
-    st.session_state.grid_key = 0
 if "school_name" not in st.session_state:
     st.session_state.school_name = "경남해양고등학교"
 if "hourly_rate" not in st.session_state:
@@ -23,7 +21,7 @@ if "raw_df" not in st.session_state:
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
 
-# Custom CSS (인쇄 및 테이블 디자인)
+# Custom CSS
 st.markdown("""
 <style>
     @media print {
@@ -50,7 +48,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. 공식 Streamlit 커스텀 컴포넌트 생성 (JS -> Python 다이렉트 통신)
+# 2. 공식 Streamlit 커스텀 컴포넌트 생성 (우클릭 메뉴 & 단축키)
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -174,9 +172,18 @@ def init_custom_component():
             const menu = document.getElementById("contextMenu");
             const overItem = document.getElementById("pasteOverwriteItem");
             const swapItem = document.getElementById("pasteSwapItem");
-            if(copiedData) { overItem.style.display = "flex"; swapItem.style.display = "flex"; } 
-            else { overItem.style.display = "none"; swapItem.style.display = "none"; }
-            menu.style.left = `${x}px`; menu.style.top = `${y}px`; menu.style.display = "block";
+            
+            // 복사된 데이터 유무와 관계없이 우클릭 기본 메뉴 전부 출력
+            if(copiedData) { 
+                overItem.style.display = "flex"; 
+                swapItem.style.display = "flex"; 
+            } else { 
+                overItem.style.display = "none"; 
+                swapItem.style.display = "none"; 
+            }
+            menu.style.left = `${x}px`; 
+            menu.style.top = `${y}px`; 
+            menu.style.display = "block";
         }
 
         function hideContextMenu() { document.getElementById("contextMenu").style.display = "none"; }
@@ -241,19 +248,21 @@ def init_custom_component():
         <tbody id="grid-body"></tbody>
     </table>
     
+    <!-- 우클릭 통합 메뉴 -->
     <div id="contextMenu" class="context-menu">
         <div class="context-menu-item" onclick="onMenuAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" onclick="onMenuAction('COPY')">📋 수업 복사 (Ctrl+C)</div>
-        <div id="pasteOverwriteItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_OVERWRITE')">📥 복사본 덮어쓰기</div>
-        <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 복사본과 맞교환</div>
+        <div id="pasteOverwriteItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_OVERWRITE')">📥 수업 이동/덮어쓰기</div>
+        <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 수업 위치 맞교환</div>
     </div>
     
+    <!-- 셀 밀착형 붙여넣기 팝업 -->
     <div id="pastePopover" class="paste-popover">
         <div style="font-weight:bold; color:#1e3a8a; font-size:13px; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
         <div id="pastePopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
-        <button class="pop-btn btn-overwrite" onclick="onMenuAction('PASTE_OVERWRITE')">1. 덮어쓰기 (기존 수업 제거 후 배치)</button>
-        <button class="pop-btn btn-swap-paste" onclick="onMenuAction('PASTE_SWAP')">2. 교체하기 (원래 수업과 서로 교환)</button>
+        <button class="pop-btn btn-overwrite" onclick="onMenuAction('PASTE_OVERWRITE')">1. 수업 이동 (해당 위치로 완전 배치)</button>
+        <button class="pop-btn btn-swap-paste" onclick="onMenuAction('PASTE_SWAP')">2. 수업 교체 (원래 수업과 서로 교환)</button>
         <button class="pop-btn btn-close" onclick="hidePastePopover()">취소</button>
     </div>
 </body>
@@ -264,12 +273,13 @@ def init_custom_component():
 
 AdminGrid = init_custom_component()
 
-# 3. DB 연동 및 함수 정의
+# 3. DB 연동 및 동기화 테이블 관리
 DB_FILE = "timemaster_data.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS sub_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, s_date TEXT, s_day TEXT, s_period INTEGER, t_cls TEXT, o_teacher TEXT, s_teacher TEXT, reason TEXT, rate INTEGER, week_offset INTEGER)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS cell_overrides (id INTEGER PRIMARY KEY AUTOINCREMENT, s_date TEXT, s_day TEXT, s_period INTEGER, t_cls TEXT, subj TEXT, teacher TEXT)""")
     c.execute("PRAGMA table_info(swap_logs)")
     cols = [row[1] for row in c.fetchall()]
     if "date1" not in cols:
@@ -290,6 +300,20 @@ def save_sub_log(log):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO sub_logs (s_date, s_day, s_period, t_cls, o_teacher, s_teacher, reason, rate, week_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (log["날짜"], log["요일"], log["교시"], log["학급"], log["원교사"], log["대강교사"], log["대강사유"], log["단가"], log["주차"]))
+    conn.commit()
+    conn.close()
+
+def load_cell_overrides():
+    conn = sqlite3.connect(DB_FILE)
+    df = pd.read_sql_query("SELECT * FROM cell_overrides", conn)
+    conn.close()
+    return df.to_dict('records')
+
+def save_cell_override(date_str, day_str, period, cls, subj, teacher):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM cell_overrides WHERE s_date = ? AND t_cls = ? AND s_period = ?", (date_str, cls, period))
+    c.execute("INSERT INTO cell_overrides (s_date, s_day, s_period, t_cls, subj, teacher) VALUES (?, ?, ?, ?, ?, ?)", (date_str, day_str, period, cls, subj, teacher))
     conn.commit()
     conn.close()
 
@@ -320,6 +344,7 @@ def clear_all_db():
     c = conn.cursor()
     c.execute("DELETE FROM sub_logs")
     c.execute("DELETE FROM swap_logs")
+    c.execute("DELETE FROM cell_overrides")
     conn.commit()
     conn.close()
 
@@ -335,7 +360,7 @@ def get_week_dates(offset=0):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_dates["금"].strftime("%Y-%m-%d")
 
-# 4. 사이드바 설정
+# 4. 사이드바
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
 mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 
@@ -350,7 +375,7 @@ if mode == "관리자 모드 (수업교체/대강)":
             st.sidebar.error("비밀번호가 일치하지 않습니다.")
             mode = "학생/교사 시간표 보기"
 
-# 5. 엑셀 데이터 파싱
+# 5. 파싱 및 모든 변경사항 통합 적용 엔진 (핵심)
 DEFAULT_EXCEL = "2026년 2학기 시간표.xlsx"
 if st.session_state.raw_df is None and os.path.exists(DEFAULT_EXCEL):
     st.session_state.raw_df = pd.read_excel(DEFAULT_EXCEL)
@@ -408,24 +433,43 @@ def parse_excel_timetable(df_in):
 
 p_df, teacher_list = parse_excel_timetable(st.session_state.raw_df)
 
-def apply_swaps(df, current_week_dates):
-    if df is None or df.empty: return df
-    date_to_day = {v.strftime("%Y-%m-%d"): k for k, v in current_week_dates.items()}
+# 모든 변경사항(맞교환 + 셀 이동 + 삭제)을 '실시간 최신 상태'로 통합 반영하는 핵심 함수
+def get_latest_updated_timetable(base_df, current_week_dates):
+    if base_df is None or base_df.empty: return base_df
+    df = base_df.copy()
     df["is_swapped"] = False
+    date_to_day = {v.strftime("%Y-%m-%d"): k for k, v in current_week_dates.items()}
+
+    # 1. 맞교환(Swap) 적용
     for swap in st.session_state.swap_logs:
         d1, d2 = swap["date1"], swap["date2"]
         if d1 in date_to_day and d2 in date_to_day:
             day1, day2 = date_to_day[d1], date_to_day[d2]
-            m1, m2 = (df["학급"] == swap["cls1"]) & (df["요일"] == day1) & (df["교시"] == swap["period1"]), (df["학급"] == swap["cls2"]) & (df["요일"] == day2) & (df["교시"] == swap["period2"])
+            m1 = (df["학급"] == swap["cls1"]) & (df["요일"] == day1) & (df["교시"] == swap["period1"])
+            m2 = (df["학급"] == swap["cls2"]) & (df["요일"] == day2) & (df["교시"] == swap["period2"])
             if m1.any() and m2.any():
                 idx1, idx2 = df[m1].index[0], df[m2].index[0]
                 df.loc[idx1, "과목"], df.loc[idx1, "교사"], df.loc[idx2, "과목"], df.loc[idx2, "교사"] = df.loc[idx2, "과목"], df.loc[idx2, "교사"], df.loc[idx1, "과목"], df.loc[idx1, "교사"]
                 df.loc[idx1, "is_swapped"], df.loc[idx2, "is_swapped"] = True, True
+
+    # 2. 이동/덮어쓰기(Cell Overrides) 적용
+    overrides = load_cell_overrides()
+    for ov in overrides:
+        d_str = ov["s_date"]
+        if d_str in date_to_day:
+            day_kr = date_to_day[d_str]
+            m = (df["학급"] == ov["t_cls"]) & (df["요일"] == day_kr) & (df["교시"] == int(ov["s_period"]))
+            if m.any():
+                idx = df[m].index[0]
+                df.loc[idx, "과목"] = ov["subj"]
+                df.loc[idx, "교사"] = ov["teacher"]
+                df.loc[idx, "is_swapped"] = True
+
     return df
 
-parsed_df = apply_swaps(p_df, current_week_dates)
+parsed_df = get_latest_updated_timetable(p_df, current_week_dates)
 
-# 조회용 렌더링 HTML 생성 함수 복원
+# 조회용 HTML 렌더링 함수들
 def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]
     periods = list(range(1, 8))
@@ -464,6 +508,7 @@ def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
                 sub_key = (date_str, cls, p)
                 cell_class, badge_html = "", ""
                 
+                # 대강 및 삭제(빈칸) 처리
                 if is_sub_entry or sub_key in sub_dict:
                     if not sub_info: sub_info = sub_dict[sub_key]
                     if sub_info["대강교사"] == "빈칸":
@@ -478,10 +523,13 @@ def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
                             teacher = f"<s>{teacher}</s> ➔ <b>{sub_info['대강교사']}</b>"
                 elif is_swapped:
                     cell_class = "bg-swapped"
-                    badge_html = "<span class='status-badge badge-swap'>🔄수업교체</span><br>"
+                    badge_html = "<span class='status-badge badge-swap'>🔄수업변동</span><br>"
                 
                 display_teacher = f"({teacher})" if filter_type == "CLASS" and teacher else f"[{cls}]"
-                html += f"<td class='{cell_class}'>{badge_html}<div class='subject-name'>{subj}</div><div class='teacher-name'>{display_teacher}</div></td>"
+                if subj == "" or subj == "-":
+                    html += "<td>-</td>"
+                else:
+                    html += f"<td class='{cell_class}'>{badge_html}<div class='subject-name'>{subj}</div><div class='teacher-name'>{display_teacher}</div></td>"
             else: html += "<td>-</td>"
         html += "</tr>"
     html += "</tbody></table></div>"
@@ -519,10 +567,10 @@ def build_merged_full_grid_html(df_in):
                             txt = f"<span class='badge-sub status-badge'>대강</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({sub_dict[sub_key]['대강교사']})</div>"
                     elif is_swapped:
                         bg_class = "bg-swapped"
-                        txt = f"<span class='badge-swap status-badge'>교체</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
+                        txt = f"<span class='badge-swap status-badge'>변동</span><br><div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
                     else:
                         bg_class = ""
-                        txt = f"<div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>"
+                        txt = f"<div class='subject-name'>{subj}</div><div class='teacher-name'>({teacher})</div>" if subj else "-"
                     
                     html += f"<td class='{bg_class}'>{txt}</td>"
                 else: html += "<td>-</td>"
@@ -543,7 +591,7 @@ with c_mid:
     with col_b4:
         if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
 
-# 6. 메인 UI 탭 구성
+# 6. 메인 UI 구동 및 이벤트 동기화
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     
@@ -562,12 +610,13 @@ if parsed_df is not None and not parsed_df.empty:
 
         if view_mode == "전체 시간표 (가로: 학급 / 세로: 요일·교시)":
             if is_admin:
-                st.info("💡 **가이드**: 셀 선택 후 Delete(삭제), Ctrl+C(복사), Ctrl+V(붙여넣기) 및 마우스 우클릭 기능 이용 가능")
+                st.info("💡 **가이드**: 셀 클릭 후 Delete(삭제), Ctrl+C(복사), Ctrl+V(붙여넣기) 및 마우스 우클릭 기능 이용 가능")
                 
                 days = ["월", "화", "수", "목", "금"]
                 classes = sorted(parsed_df["학급"].unique())
                 sub_dict = {(log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs}
                 grid_data = {}
+                
                 for d in days:
                     date_str = current_week_dates[d].strftime("%Y-%m-%d")
                     for p in range(1, 8):
@@ -592,7 +641,7 @@ if parsed_df is not None and not parsed_df.empty:
                             else:
                                 grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-                action_result = AdminGrid(grid_data=grid_data, classes=classes, copied_data=st.session_state.copied_data, key=f"grid_{st.session_state.grid_key}")
+                action_result = AdminGrid(grid_data=grid_data, classes=classes, copied_data=st.session_state.copied_data, key="admin_grid_stable")
 
                 if action_result:
                     act = action_result.get("act")
@@ -613,9 +662,10 @@ if parsed_df is not None and not parsed_df.empty:
                         t_date, t_cls, t_period = t_item.get("date"), t_item.get("cls"), int(t_item.get("period"))
                         day_kr = ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()]
                         
+                        # 3가지 시간표 버전 모두에 빈칸 반영
                         save_sub_log({"날짜": t_date, "요일": day_kr, "교시": t_period, "학급": t_cls, "원교사": t_item.get("teacher"), "대강교사": "빈칸", "대강사유": "관리자 삭제", "단가": 0, "주차": st.session_state.week_offset})
+                        save_cell_override(t_date, day_kr, t_period, t_cls, "", "")
                         st.session_state.sub_logs = load_sub_logs()
-                        st.session_state.grid_key += 1
                         st.toast(f"🗑️ [{t_cls}] {t_period}교시 수업 삭제(빈칸) 완료")
                         st.rerun()
 
@@ -624,6 +674,7 @@ if parsed_df is not None and not parsed_df.empty:
                         day_kr = ["월","화","수","목","금"][pd.to_datetime(t_date).weekday()]
                         c_teacher, c_subj = c_item.get("teacher"), c_item.get("subj")
 
+                        # 변경 후 '최신 실시간 데이터(parsed_df)' 기준으로 중복/충돌 검증
                         conflict = parsed_df[(parsed_df["교사"] == c_teacher) & (parsed_df["요일"] == day_kr) & (parsed_df["교시"] == t_period) & (parsed_df["학급"] != t_cls)]
                         
                         if not conflict.empty:
@@ -631,15 +682,14 @@ if parsed_df is not None and not parsed_df.empty:
                             st.toast(f"⚠️ 중복입니다! {c_teacher} 선생님은 {day_kr}요일 {t_period}교시 [{conflict_cls}]에 이미 수업이 있습니다.")
                         else:
                             if act == "PASTE_OVERWRITE":
-                                save_sub_log({"날짜": t_date, "요일": day_kr, "교시": t_period, "학급": t_cls, "원교사": t_item.get("teacher"), "대강교사": c_teacher, "대강사유": f"복사({c_subj})", "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset})
-                                st.session_state.sub_logs = load_sub_logs()
-                                st.toast(f"📥 [{t_cls}] {t_period}교시에 [{c_subj}({c_teacher})] 덮어쓰기 완료")
+                                # 대강이 아닌 '수업 이동/배치'로 변경사항 실시간 저장
+                                save_cell_override(t_date, day_kr, t_period, t_cls, c_subj, c_teacher)
+                                st.toast(f"📥 [{t_cls}] {t_period}교시에 [{c_subj}({c_teacher})] 수업 이동 완료")
                             elif act == "PASTE_SWAP":
                                 save_swap_request({"cls1": c_item["cls"], "date1": c_item["date"], "period1": c_item["period"], "subj1": c_item["subj"], "teacher1": c_teacher, "cls2": t_cls, "date2": t_date, "period2": t_period, "subj2": t_item.get("subj"), "teacher2": t_item.get("teacher")}, auto_approve=True)
                                 st.session_state.swap_logs = load_swap_logs("APPROVED")
                                 st.toast(f"🔀 [{c_item['cls']}] {c_item['period']}교시 ↔ [{t_cls}] {t_period}교시 맞교환 완료")
                             
-                            st.session_state.grid_key += 1
                             st.rerun()
             else:
                 st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
@@ -737,13 +787,15 @@ if parsed_df is not None and not parsed_df.empty:
 
     if is_admin:
         with tab3:
-            st.subheader("📝 스마트 대강 지정 및 사유 기록 (관리자 전용)")
+            st.subheader("📝 스마트 대강 지정 및 사유 기록 (오직 대강 처리 전용)")
             c_sub1, c_sub2 = st.columns(2)
             with c_sub1:
                 st.markdown("##### 1️⃣ 대강 처리할 수업 지정")
                 sub_date = st.date_input("대강 날짜 선택", date(2026, 8, 10), key="s_date")
                 sub_day_kr = ["월", "화", "수", "목", "금", "토", "일"][sub_date.weekday()]
                 sub_period = st.selectbox("교시 선택", list(range(1, 8)))
+                
+                # 실시간 변경 반영된 최신 시간표 데이터 사용
                 target_classes_df = parsed_df[(parsed_df["요일"] == sub_day_kr) & (parsed_df["교시"] == sub_period)]
                 
                 if not target_classes_df.empty:
@@ -759,8 +811,9 @@ if parsed_df is not None and not parsed_df.empty:
                     selected_target = None
 
             with c_sub2:
-                st.markdown("##### 2️⃣ 대강 교사 지정 (해당 교시 수업 없는 교사만 자동 선별)")
+                st.markdown("##### 2️⃣ 대강 교사 지정 (최신 시수 상태 반영)")
                 if selected_target is not None:
+                    # 최신 시간표 기준으로 수업 없는 빈 교사만 선별
                     busy_teachers = set(parsed_df[(parsed_df["요일"] == sub_day_kr) & (parsed_df["교시"] == sub_period)]["교사"].unique())
                     available_teachers = [t for t in teacher_list if t not in busy_teachers]
                     
@@ -802,7 +855,9 @@ if parsed_df is not None and not parsed_df.empty:
                 if len(st.session_state.sub_logs) > 0:
                     all_sub_df = pd.DataFrame(st.session_state.sub_logs)
                     all_sub_df["날짜_dt"] = pd.to_datetime(all_sub_df["날짜"]).dt.date
-                    filtered_sub = all_sub_df[(all_sub_df["날짜_dt"] >= start_filter) & (all_sub_df["날짜_dt"] <= end_filter)].copy()
+                    
+                    # '관리자 삭제(빈칸)' 항목을 대강 수당 일지 출력 대상에서 자동 제외
+                    filtered_sub = all_sub_df[(all_sub_df["날짜_dt"] >= start_filter) & (all_sub_df["날짜_dt"] <= end_filter) & (all_sub_df["대강교사"] != "빈칸")].copy()
                     
                     if not filtered_sub.empty:
                         filtered_sub["지급액"] = filtered_sub["단가"]
