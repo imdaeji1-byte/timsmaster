@@ -116,9 +116,18 @@
             const menu = document.getElementById("contextMenu");
             const overItem = document.getElementById("pasteOverwriteItem");
             const swapItem = document.getElementById("pasteSwapItem");
-            if(copiedData) { overItem.style.display = "flex"; swapItem.style.display = "flex"; } 
-            else { overItem.style.display = "none"; swapItem.style.display = "none"; }
-            menu.style.left = `${x}px`; menu.style.top = `${y}px`; menu.style.display = "block";
+            
+            // 복사된 데이터 유무와 관계없이 우클릭 기본 메뉴 전부 출력
+            if(copiedData) { 
+                overItem.style.display = "flex"; 
+                swapItem.style.display = "flex"; 
+            } else { 
+                overItem.style.display = "none"; 
+                swapItem.style.display = "none"; 
+            }
+            menu.style.left = `${x}px`; 
+            menu.style.top = `${y}px`; 
+            menu.style.display = "block";
         }
 
         function hideContextMenu() { document.getElementById("contextMenu").style.display = "none"; }
@@ -183,19 +192,21 @@
         <tbody id="grid-body"></tbody>
     </table>
     
+    <!-- 우클릭 통합 메뉴 -->
     <div id="contextMenu" class="context-menu">
         <div class="context-menu-item" onclick="onMenuAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" onclick="onMenuAction('COPY')">📋 수업 복사 (Ctrl+C)</div>
-        <div id="pasteOverwriteItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_OVERWRITE')">📥 복사본 덮어쓰기</div>
-        <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 복사본과 맞교환</div>
+        <div id="pasteOverwriteItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_OVERWRITE')">📥 수업 이동/덮어쓰기</div>
+        <div id="pasteSwapItem" class="context-menu-item" style="display:none;" onclick="onMenuAction('PASTE_SWAP')">🔀 수업 위치 맞교환</div>
     </div>
     
+    <!-- 셀 밀착형 붙여넣기 팝업 -->
     <div id="pastePopover" class="paste-popover">
         <div style="font-weight:bold; color:#1e3a8a; font-size:13px; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
         <div id="pastePopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
-        <button class="pop-btn btn-overwrite" onclick="onMenuAction('PASTE_OVERWRITE')">1. 덮어쓰기 (기존 수업 제거 후 배치)</button>
-        <button class="pop-btn btn-swap-paste" onclick="onMenuAction('PASTE_SWAP')">2. 교체하기 (원래 수업과 서로 교환)</button>
+        <button class="pop-btn btn-overwrite" onclick="onMenuAction('PASTE_OVERWRITE')">1. 수업 이동 (해당 위치로 완전 배치)</button>
+        <button class="pop-btn btn-swap-paste" onclick="onMenuAction('PASTE_SWAP')">2. 수업 교체 (원래 수업과 서로 교환)</button>
         <button class="pop-btn btn-close" onclick="hidePastePopover()">취소</button>
     </div>
 </body>
