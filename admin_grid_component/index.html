@@ -46,7 +46,7 @@
                 gridData = event.data.args.grid_data;
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
-                copiedData = event.data.args.copied_data || null; // 파이썬 세션에서 최신 복사본 로드
+                copiedData = event.data.args.copied_data || null;
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
@@ -123,7 +123,6 @@
             document.getElementById("subPopover").style.display = "none";
         }
 
-        // [복사/붙여넣기 팝업]
         function openPastePopover() {
             hideAllPopups();
             if(!copiedData || !selectedKey) return;
@@ -131,14 +130,12 @@
             positionPopup("pastePopover");
         }
 
-        // [날짜 지정 스마트 교체 (주차 간 교체 지원)]
         function openCrossSwapPopover() {
             hideAllPopups();
             if(!selectedKey) return;
             const t = gridData[selectedKey];
             if(!t.subj) { showToast("⚠️ 빈 셀은 교체할 수 없습니다."); return; }
             document.getElementById("crossSwapPopInfo").innerHTML = `교체 대상: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
-            // 현재 날짜 기본 세팅
             document.getElementById("crossSwapDateInput").value = t.date;
             positionPopup("crossSwapPopover");
         }
@@ -149,7 +146,6 @@
             dispatchAction('REQ_CROSS_SWAP', { s_date: val });
         }
 
-        // [대강 지정 팝업]
         function openSubPopover() {
             hideAllPopups();
             if(!selectedKey) return;
@@ -171,13 +167,9 @@
                 copiedData = t; 
                 showToast(`📋 복사 완료: ${t.subj}(${t.teacher})`);
                 dispatchAction("COPY"); 
-            } else {
-                showToast("⚠️ 빈 셀은 복사 불가");
-                hideAllPopups();
-            }
+            } else { showToast("⚠️ 빈 셀은 복사 불가"); hideAllPopups(); }
         }
 
-        // 서버 전송 로직
         function dispatchAction(act, extraData = {}) {
             hideAllPopups();
             const payload = Object.assign({ action_id: Date.now().toString(), act: act, target: gridData[selectedKey], copiedData: copiedData }, extraData);
@@ -224,7 +216,6 @@
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
-    <!-- 모든 주차에 대응하는 스마트 교체 조회 팝업 -->
     <div id="crossSwapPopover" class="popover">
         <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 날짜 지정 스마트 교체</div>
         <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>

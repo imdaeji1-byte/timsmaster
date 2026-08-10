@@ -17,31 +17,43 @@ if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 if "raw_df" not in st.session_state: st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 
-# 콜백 함수 정의 (주차 이동 시 UI 초기화 방지)
-def go_prev_week(): st.session_state.week_offset -= 1
-def go_this_week(): st.session_state.week_offset = 0
-def go_next_week(): st.session_state.week_offset += 1
+# [상태 보존용 변수] 주차 이동 시 학급/교사 뷰가 풀리지 않도록 강력 고정
+if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
+if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
+if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# A4 인쇄 및 UI 디자인 전용 CSS
+# A4 인쇄 완벽 대응 및 UI 디자인 CSS
 st.markdown("""
 <style>
-    /* A4 가로 인쇄 최적화 CSS */
+    /* 🖨️ A4 가로 인쇄 최적화 (모든 껍데기 숨기고 시간표만 출력) */
     @media print {
-        @page { size: A4 landscape; margin: 15mm; }
-        body { background-color: white !important; zoom: 90%; }
-        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], button, .stButton { display: none !important; }
-        .main .block-container { padding: 0 !important; max-width: 100% !important; width: 100% !important; }
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        .table-container { box-shadow: none !important; border: 2px solid #000; margin-bottom: 0; }
-        .unified-table th, .unified-table td { border: 1px solid #64748b !important; }
-        .unified-table th { background-color: #1e3a8a !important; color: white !important; }
-        .day-col { background-color: #1e3a8a !important; color: white !important; }
-        .period-col { background-color: #f1f5f9 !important; }
-        .bg-substitute { background-color: #ffedd5 !important; }
-        .bg-swapped { background-color: #fef08a !important; }
-        .badge-sub { background-color: #ea580c !important; color: white !important; }
-        .badge-swap { background-color: #ca8a04 !important; color: white !important; }
+        @page { size: A4 landscape; margin: 10mm; }
+        body, html { background-color: white !important; zoom: 95%; margin: 0 !important; padding: 0 !important; }
+        
+        /* 불필요한 모든 Streamlit 껍데기, 메뉴, 알림창 완전 차단 */
+        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], 
+        [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], 
+        [data-testid="stSelectbox"], [data-testid="stHorizontalBlock"], [data-testid="stAlert"], 
+        [data-testid="stToastContainer"], iframe, .stButton, .hide-on-print { 
+            display: none !important; 
+        }
+
+        /* 메인 컨테이너 여백 100% 활용 */
+        .main .block-container { padding: 0 !important; max-width: 100% !important; width: 100% !important; margin-top: 0 !important; }
+        
+        /* 표 인쇄 최적화 */
+        .table-container { display: block !important; box-shadow: none !important; border: 2px solid #000 !important; page-break-inside: avoid; margin-top: 10px; }
+        .unified-table { width: 100% !important; border-collapse: collapse !important; }
+        .unified-table th { background-color: #1e3a8a !important; color: white !important; border: 1px solid #334155 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .unified-table td { border: 1px solid #64748b !important; }
+        .day-col { background-color: #1e3a8a !important; color: white !important; -webkit-print-color-adjust: exact; }
+        .period-col { background-color: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+        .bg-substitute { background-color: #ffedd5 !important; -webkit-print-color-adjust: exact; }
+        .bg-swapped { background-color: #fef08a !important; -webkit-print-color-adjust: exact; }
+        .badge-sub { background-color: #ea580c !important; color: white !important; -webkit-print-color-adjust: exact; }
+        .badge-swap { background-color: #ca8a04 !important; color: white !important; -webkit-print-color-adjust: exact; }
     }
+    
     /* 웹 화면 전용 CSS */
     .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
     .unified-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; background-color: #ffffff !important; table-layout: fixed; }
@@ -63,7 +75,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. ⚡ 초고속 JS 컴포넌트
+# 2. ⚡ 초고속 JS 컴포넌트 (모든 팝업과 클립보드를 브라우저 단에서 즉시 처리)
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -287,6 +299,7 @@ def init_custom_component():
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
+    <!-- 모든 주차에 대응하는 스마트 교체 조회 팝업 -->
     <div id="crossSwapPopover" class="popover">
         <div style="font-weight:bold; color:#1e3a8a; margin-bottom:4px;">🔄 날짜 지정 스마트 교체</div>
         <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
@@ -513,7 +526,7 @@ parsed_df = get_latest_updated_timetable(p_df, current_week_dates)
 
 def build_weekly_html_table(all_parsed_df, title_name, filter_type="CLASS"):
     days = ["월", "화", "수", "목", "금"]; periods = list(range(1, 8))
-    html = f"<div class='print-hide' style='text-align: center; margin-bottom: 12px;'><h3>🏫 {title_name} 주간 시간표 ({mon_str} ~ {fri_str})</h3></div><div class='table-container'><table class='unified-table'><thead><tr><th style='width:8%;'>교시</th>"
+    html = f"<div class='print-title'><h3 style='text-align: center; margin-bottom: 12px;'>🏫 {title_name} 주간 시간표 ({mon_str} ~ {fri_str})</h3></div><div class='table-container'><table class='unified-table'><thead><tr><th style='width:8%;'>교시</th>"
     for d in days: html += f"<th>{d} ({current_week_dates[d].strftime('%m/%d')})</th>"
     html += "</tr></thead><tbody>"
     sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
@@ -575,17 +588,20 @@ def build_merged_full_grid_html(df_in):
             html += "</tr>"
     return html + "</tbody></table></div>"
 
-# 6. 상단 UI (콜백을 사용하여 주차 이동 시 상태 유지)
+# 6. 상단 UI (인쇄 시 숨겨짐)
 st.markdown(f"<h1 class='print-hide'>📅 {st.session_state.school_name} 시간표 관리 시스템</h1>", unsafe_allow_html=True)
 c_nav1, c_nav2, c_nav3 = st.columns([2, 5, 2])
 with c_nav2:
     col_b1, col_b2, col_b3, col_b4 = st.columns([1, 2.8, 0.9, 1])
-    with col_b1: st.button("◀ 이전주", use_container_width=True, on_click=go_prev_week)
-    with col_b2: st.markdown(f"<h4 style='text-align: center; color: #1e3a8a; margin: 0;'>📆 [{mon_str} ~ {fri_str}]</h4>", unsafe_allow_html=True)
-    with col_b3: st.button("이번주", use_container_width=True, on_click=go_this_week)
-    with col_b4: st.button("다음주 ▶", use_container_width=True, on_click=go_next_week)
+    with col_b1: 
+        if st.button("◀ 이전주", use_container_width=True): st.session_state.week_offset -= 1; st.rerun()
+    with col_b2: st.markdown(f"<h4 class='print-hide' style='text-align: center; color: #1e3a8a; margin: 0;'>📆 [{mon_str} ~ {fri_str}]</h4>", unsafe_allow_html=True)
+    with col_b3: 
+        if st.button("이번주", use_container_width=True): st.session_state.week_offset = 0; st.rerun()
+    with col_b4: 
+        if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
 
-# [Cross-week] 스마트 교체 파이썬 팝업 연동 UI
+# [Cross-week] 스마트 교체 파이썬 팝업 연동 UI (인쇄 시 숨겨짐)
 if st.session_state.action_ui is not None:
     ui = st.session_state.action_ui
     if ui["type"] == "SWAP_DATE_SELECT":
@@ -648,14 +664,23 @@ if parsed_df is not None and not parsed_df.empty:
 
     with tab1:
         c_v1, c_v2 = st.columns([3, 1])
-        with c_v1: 
-            view_mode = st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], horizontal=True, key="view_mode_radio")
+        with c_v1:
+            view_opts = ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"]
+            view_idx = view_opts.index(st.session_state.view_mode_val) if st.session_state.view_mode_val in view_opts else 0
+            view_mode = st.radio("조회 방식", view_opts, index=view_idx, horizontal=True)
+            st.session_state.view_mode_val = view_mode # 상태 유지 업데이트
         with c_v2: 
             st.write("")
-            # A4 인쇄 기능을 위한 우회 로직 버튼
-            if st.button("🖨️ 시간표 인쇄 / PDF 저장", use_container_width=True):
-                st.toast("💡 인쇄 창이 바로 뜨지 않으면 키보드에서 Ctrl+P (Mac은 Cmd+P)를 눌러주세요!")
-                components.html("<script>try{ window.parent.print(); }catch(e){ window.print(); }</script>", width=0, height=0)
+            # A4 인쇄 우회 컴포넌트 삽입
+            components.html(
+                """
+                <style>
+                    button { width: 100%; padding: 8px 14px; background-color: #2563eb; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-family: sans-serif; font-size: 14px; transition: background-color 0.2s; }
+                    button:hover { background-color: #1d4ed8; }
+                </style>
+                <button onclick="window.parent.print()">🖨️ 시간표 인쇄 / PDF 저장</button>
+                """, height=45
+            )
 
         if view_mode == "전체 시간표":
             if is_admin:
@@ -728,9 +753,17 @@ if parsed_df is not None and not parsed_df.empty:
                 st.markdown(build_merged_full_grid_html(parsed_df), unsafe_allow_html=True)
 
         elif view_mode == "학급별 주간 시간표": 
-            st.markdown(build_weekly_html_table(parsed_df, st.selectbox("🎯 학급 선택", sorted(parsed_df["학급"].unique()), key="target_cls_select"), "CLASS"), unsafe_allow_html=True)
+            cls_opts = sorted(parsed_df["학급"].unique())
+            idx = cls_opts.index(st.session_state.sel_cls_val) if st.session_state.sel_cls_val in cls_opts else 0
+            target_cls = st.selectbox("🎯 학급 선택", cls_opts, index=idx)
+            st.session_state.sel_cls_val = target_cls # 상태 유지
+            st.markdown(build_weekly_html_table(parsed_df, target_cls, "CLASS"), unsafe_allow_html=True)
         else: 
-            st.markdown(build_weekly_html_table(parsed_df, st.selectbox("👨‍🏫 교사 선택", teacher_list, key="target_t_select"), "TEACHER"), unsafe_allow_html=True)
+            t_opts = teacher_list
+            idx = t_opts.index(st.session_state.sel_t_val) if st.session_state.sel_t_val in t_opts else 0
+            target_t = st.selectbox("👨‍🏫 교사 선택", t_opts, index=idx)
+            st.session_state.sel_t_val = target_t # 상태 유지
+            st.markdown(build_weekly_html_table(parsed_df, target_t, "TEACHER"), unsafe_allow_html=True)
 
     with tab2:
         if is_admin:
@@ -753,7 +786,7 @@ if parsed_df is not None and not parsed_df.empty:
             else: st.success("현재 대기 중인 교체 요청이 없습니다.")
         else:
             st.subheader("🔄 날짜 지정 기반 수업 맞교환 신청 (승인 요청제)")
-            selected_cls = st.selectbox("🎯 대상 학급 선택", sorted(parsed_df["학급"].unique()), key="swap_req_cls")
+            selected_cls = st.selectbox("🎯 대상 학급 선택", sorted(parsed_df["학급"].unique()))
             sub_dict_swap = { (log["날짜"], log["학급"], int(log["교시"])): log["대강교사"] for log in st.session_state.sub_logs }
             
             col_a, col_b = st.columns(2)
