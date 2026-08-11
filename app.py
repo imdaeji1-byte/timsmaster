@@ -20,13 +20,13 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 📍 [NEW] URL 파라미터 자동 인식 (예: ?teacher=김수학 접속 시 해당 선생님 주간 시간표 우선 출력)
+# URL 파라미터 자동 인식
 query_params = st.query_params
 if "teacher" in query_params:
     st.session_state.view_mode_val = "교사별 주간 시간표"
     st.session_state.sel_t_val = query_params["teacher"]
 
-# 2. 🖨️ A4 1페이지 출력 보정 & 🎨 헤더 스타일링 & 🚨 아이콘 폰트 깨짐 완벽 복구
+# 2. 🖨️ 인쇄 & 스타일링 CSS
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -45,9 +45,7 @@ st.markdown("""
         color: #64748b !important;
     }
     
-    [data-testid="stTextInput"] button {
-        display: none !important;
-    }
+    [data-testid="stTextInput"] button { display: none !important; }
     
     [data-testid="stTextInput"] label {
         font-weight: 800 !important;
@@ -83,7 +81,6 @@ st.markdown("""
     .unified-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; table-layout: fixed; }
     
     .unified-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; font-size: 13.5px; border-radius: 10px; border-bottom: 2px solid #cbd5e1; }
-    
     .unified-table td { background-color: #f8fafc; padding: 6px 1px; border-radius: 10px; vertical-align: middle; height: 58px; word-break: break-all; transition: transform 0.1s ease; }
     
     td.day-col { background-color: #e0f2fe !important; color: #0369a1 !important; font-weight: 800 !important; width: 4% !important; vertical-align: middle !important; border-radius: 10px; padding: 4px 2px !important; }
@@ -103,7 +100,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 우클릭 팝업 일체형 UI 컴포넌트
+# 3. ⚡ 커스텀 그리드 컴포넌트 (관리자 및 일반 교사 우클릭 교체 지원)
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -116,9 +113,7 @@ def init_custom_component():
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; overflow-y: hidden; }
         .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
-        
         .admin-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; border-radius: 10px; font-size: 13.5px; border-bottom: 2px solid #cbd5e1; }
-        
         .admin-table td { background-color: #f8fafc; padding: 6px 2px; border-radius: 10px; height: 58px; vertical-align: middle; cursor: pointer; position: relative; }
         .admin-table td:hover { filter: brightness(0.95); outline: 2px solid #0284c7; }
         .admin-table td.selected { outline: 3px solid #ef4444 !important; background-color: #fef2f2 !important; }
@@ -150,7 +145,7 @@ def init_custom_component():
             setFrameHeight: function(h) { window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h}, "*"); }
         };
 
-        let gridData = {}; let classes = []; let teacherList = []; let copiedData = null;
+        let gridData = {}; let classes = []; let teacherList = []; let copiedData = null; isAdmin = false;
         let selectedKey = null; let selectedTdElement = null; const days = ["월", "화", "수", "목", "금"];
 
         window.addEventListener("message", function(event) {
@@ -160,6 +155,7 @@ def init_custom_component():
                 classes = event.data.args.classes;
                 teacherList = event.data.args.teacher_list || [];
                 copiedData = event.data.args.copied_data || null;
+                isAdmin = event.data.args.is_admin || false;
                 renderGrid();
                 setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
             }
@@ -234,9 +230,21 @@ def init_custom_component():
 
         function showContextMenu(x, y) {
             const menu = document.getElementById("contextMenu");
-            document.getElementById("pasteMenuBtn").style.display = copiedData ? "flex" : "none";
-            menu.style.display = "block";
             
+            // 관리자 및 일반 교사 우클릭 권한 구별
+            if(isAdmin) {
+                document.getElementById("adminDelBtn").style.display = "flex";
+                document.getElementById("adminCopyBtn").style.display = "flex";
+                document.getElementById("pasteMenuBtn").style.display = copiedData ? "flex" : "none";
+                document.getElementById("adminSubBtn").style.display = "flex";
+            } else {
+                document.getElementById("adminDelBtn").style.display = "none";
+                document.getElementById("adminCopyBtn").style.display = "none";
+                document.getElementById("pasteMenuBtn").style.display = "none";
+                document.getElementById("adminSubBtn").style.display = "none";
+            }
+
+            menu.style.display = "block";
             const menuWidth = menu.offsetWidth || 200;
             let popLeft = x;
             if(x + menuWidth > window.innerWidth + window.pageXOffset) {
@@ -267,7 +275,11 @@ def init_custom_component():
             if(!selectedKey) return;
             const t = gridData[selectedKey];
             if(!t.subj) { showToast("⚠️ 빈 셀은 교체할 수 없습니다."); return; }
+            
+            const btnText = isAdmin ? "✅ 맞교환 즉시 확정" : "📩 맞교환 승인 요청하기";
+            document.getElementById("swapSubmitBtn").innerText = btnText;
             document.getElementById("crossSwapPopInfo").innerHTML = `교체 기준: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
+            
             const dInput = document.getElementById("crossSwapDateInput");
             dInput.value = t.date;
             updateSwapCandidates();
@@ -281,7 +293,6 @@ def init_custom_component():
             candSelect.innerHTML = "";
             
             if(!selDate) return;
-            
             const targetDayNum = new Date(selDate).getDay();
             if(targetDayNum === 0 || targetDayNum === 6) {
                 candSelect.innerHTML = '<option value="">주말은 선택 불가</option>';
@@ -320,7 +331,8 @@ def init_custom_component():
                 s_date2: dateVal,
                 period2: target2.period2,
                 subj2: target2.subj2,
-                teacher2: target2.teacher2
+                teacher2: target2.teacher2,
+                is_admin_action: isAdmin
             });
         }
 
@@ -357,7 +369,7 @@ def init_custom_component():
         window.onclick = (e) => { if(!e.target.closest(".context-menu") && !e.target.closest(".popover")) hideAllPopups(); };
 
         window.addEventListener("keydown", (e) => {
-            if(!selectedKey) return;
+            if(!selectedKey || !isAdmin) return;
             if(e.key === "Delete" || e.key === "Backspace") {
                 selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; 
                 showToast("🗑️ 삭제 완료");
@@ -378,12 +390,12 @@ def init_custom_component():
     </table>
     
     <div id="contextMenu" class="context-menu">
-        <div class="context-menu-item" onclick="dispatchAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
-        <div class="context-menu-item" onclick="copyCurrentCell()">📋 수업 복사 (Ctrl+C)</div>
+        <div id="adminDelBtn" class="context-menu-item" onclick="dispatchAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
+        <div id="adminCopyBtn" class="context-menu-item" onclick="copyCurrentCell()">📋 수업 복사 (Ctrl+C)</div>
         <div id="pasteMenuBtn" class="context-menu-item" style="display:none;" onclick="openPastePopover()">📥 붙여넣기 (이동/교체)</div>
         <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="openCrossSwapPopover()">🔄 팝업 일체형 수업 교체</div>
-        <div class="context-menu-item" onclick="openSubPopover()">📝 스마트 대강 지정</div>
+        <div class="context-menu-item" onclick="openCrossSwapPopover()">🔄 수업 맞교환 (교체/요청)</div>
+        <div id="adminSubBtn" class="context-menu-item" onclick="openSubPopover()">📝 스마트 대강 지정</div>
     </div>
     
     <div id="pastePopover" class="popover">
@@ -404,7 +416,7 @@ def init_custom_component():
         <label style="font-size:11px; font-weight:bold; color:#334155;">2. 교체 대상 수업 선택:</label>
         <select id="swapCandidateSelect" class="pop-input"></select>
         
-        <button class="pop-btn btn-swap" onclick="submitSmartSwap()">✅ 맞교환 즉시 확정</button>
+        <button id="swapSubmitBtn" class="pop-btn btn-swap" onclick="submitSmartSwap()">✅ 진행하기</button>
         <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
     </div>
 
@@ -426,7 +438,7 @@ def init_custom_component():
 
 AdminGrid = init_custom_component()
 
-# 4. DB 및 상태 관리
+# 4. DB 및 데이터 로직
 DB_FILE = "timemaster_data.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -529,7 +541,7 @@ if mode == "관리자 모드 (수업교체/대강)":
         if pin == "3060": st.session_state.admin_authenticated = True; st.sidebar.success("관리자 로그인 완료!"); st.rerun()
         elif pin != "": st.sidebar.error("비밀번호가 일치하지 않습니다."); mode = "학생/교사 시간표 보기"
 
-# 6. 파싱 및 병합
+# 6. 기초 파싱
 DEFAULT_EXCEL = "2026년 2학기 시간표.xlsx"
 if st.session_state.raw_df is None and os.path.exists(DEFAULT_EXCEL): st.session_state.raw_df = pd.read_excel(DEFAULT_EXCEL)
 
@@ -741,7 +753,7 @@ if parsed_df is not None and not parsed_df.empty:
                                 grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
                             else: grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-                action_result = AdminGrid(grid_data=grid_data, classes=classes, teacher_list=teacher_list, copied_data=st.session_state.copied_data, key="admin_grid_fast")
+                action_result = AdminGrid(grid_data=grid_data, classes=classes, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=True, key="admin_grid_fast")
 
                 if action_result:
                     act_id = action_result.get("action_id")
@@ -775,13 +787,15 @@ if parsed_df is not None and not parsed_df.empty:
                             period2 = int(action_result.get("period2"))
                             subj2 = action_result.get("subj2")
                             teacher2 = action_result.get("teacher2")
+                            is_admin_act = action_result.get("is_admin_action", False)
                             
                             save_swap_request({
                                 "cls1": t_item["cls"], "date1": t_item["date"], "period1": int(t_item["period"]), "subj1": t_item["subj"], "teacher1": t_item["teacher"],
                                 "cls2": t_item["cls"], "date2": s_date2, "period2": period2, "subj2": subj2, "teacher2": teacher2
-                            }, auto_approve=True)
+                            }, auto_approve=is_admin_act)
                             st.session_state.swap_logs = load_swap_logs("APPROVED")
-                            st.toast("🔀 팝업 일체형 수업 맞교환 완료!")
+                            if is_admin_act: st.toast("🔀 스마트 수업 맞교환 즉시 확정!")
+                            else: st.toast("📩 관리자에게 수업 맞교환 승인 요청이 전달되었습니다!")
                             st.rerun()
 
                         elif act in ["PASTE_OVERWRITE", "PASTE_SWAP"] and c_item and t_item:
@@ -807,12 +821,58 @@ if parsed_df is not None and not parsed_df.empty:
             target_cls = st.selectbox("🎯 학급 선택", cls_opts, index=idx)
             st.session_state.sel_cls_val = target_cls
             st.markdown(build_weekly_html_table(parsed_df, target_cls, "CLASS"), unsafe_allow_html=True)
+            
         else: 
+            # 📍 교사별 주간 시간표 - 일반 교사 우클릭 교체 신청 기능 연동
             t_opts = teacher_list
             idx = t_opts.index(st.session_state.sel_t_val) if st.session_state.sel_t_val in t_opts else 0
             target_t = st.selectbox("👨‍🏫 교사 선택", t_opts, index=idx)
             st.session_state.sel_t_val = target_t
-            st.markdown(build_weekly_html_table(parsed_df, target_t, "TEACHER"), unsafe_allow_html=True)
+            
+            st.info("💡 **스마트 안내**: 본인의 수업 셀을 **우클릭**하면 바로 수업 맞교환 승인 요청을 등록할 수 있습니다.", icon="🖱️")
+            
+            days = ["월", "화", "수", "목", "금"]; classes = sorted(parsed_df["학급"].unique())
+            sub_dict = {(log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs}
+            grid_data = {}
+            for d in days:
+                date_str = current_week_dates[d].strftime("%Y-%m-%d")
+                for p in range(1, 8):
+                    for c in classes:
+                        cell = parsed_df[(parsed_df["학급"] == c) & (parsed_df["요일"] == d) & (parsed_df["교시"] == p)]
+                        key = f"{date_str}_{c}_{p}"
+                        if not cell.empty:
+                            row = cell.iloc[0]; sub_key = (date_str, c, p); is_sub = sub_key in sub_dict
+                            sub_teacher_val = sub_dict[sub_key]['대강교사'] if is_sub else ""
+                            subj_val, teacher_val = row["과목"], row["교사"]
+                            if is_sub and sub_teacher_val == "빈칸": subj_val, teacher_val = "", ""
+                            
+                            # 해당 교사 시간표 셀만 활성화
+                            if teacher_val == target_t or sub_teacher_val == target_t:
+                                grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
+                            else: grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
+                        else: grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
+
+            action_result = AdminGrid(grid_data=grid_data, classes=classes, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=False, key="user_grid_fast")
+
+            if action_result:
+                act_id = action_result.get("action_id")
+                if act_id and act_id != st.session_state.last_action_id:
+                    st.session_state.last_action_id = act_id
+                    act = action_result.get("act")
+                    t_item = action_result.get("target")
+                    
+                    if act == "EXECUTE_CROSS_SWAP" and t_item:
+                        s_date2 = action_result.get("s_date2")
+                        period2 = int(action_result.get("period2"))
+                        subj2 = action_result.get("subj2")
+                        teacher2 = action_result.get("teacher2")
+                        
+                        save_swap_request({
+                            "cls1": t_item["cls"], "date1": t_item["date"], "period1": int(t_item["period"]), "subj1": t_item["subj"], "teacher1": t_item["teacher"],
+                            "cls2": t_item["cls"], "date2": s_date2, "period2": period2, "subj2": subj2, "teacher2": teacher2
+                        }, auto_approve=False)
+                        st.toast("📩 관리자에게 수업 맞교환 승인 요청이 성공적으로 전달되었습니다!")
+                        st.rerun()
 
     with tab2:
         if is_admin:
