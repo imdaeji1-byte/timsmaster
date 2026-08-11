@@ -16,15 +16,19 @@ if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 if "raw_df" not in st.session_state: st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 
+# 📍 [핵심 수정] URL 파라미터(?teacher=이름) 감지 최우선 강제 세션 처리
+try:
+    url_params = st.query_params
+    if "teacher" in url_params:
+        target_teacher_name = url_params["teacher"]
+        st.session_state["view_mode_val"] = "교사별 주간 시간표"
+        st.session_state["sel_t_val"] = target_teacher_name
+except Exception as e:
+    pass
+
 if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
-
-# URL 파라미터 자동 인식
-query_params = st.query_params
-if "teacher" in query_params:
-    st.session_state.view_mode_val = "교사별 주간 시간표"
-    st.session_state.sel_t_val = query_params["teacher"]
 
 # 2. CSS 스타일링
 st.markdown("""
@@ -45,7 +49,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 컴포넌트: 양방향 시수 중복 필터링 완벽 구현
+# 3. ⚡ 컴포넌트
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -283,7 +287,6 @@ def init_custom_component():
             positionPopup("crossSwapPopover");
         }
 
-        // 📍 양방향 시수 중복 필터링 핵심 로직
         function updateSwapCandidates() {
             const t = gridData[selectedKey];
             const selDate = document.getElementById("crossSwapDateInput").value;
@@ -297,7 +300,6 @@ def init_custom_component():
             const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
             const targetDayKr = dayNames[targetDayNum];
             
-            // 1. 기본 후보: 같은 반, 선택 요일, 자기 자신 제외
             const basicCandidates = Object.values(gridData).filter(item => 
                 String(item.cls) === String(t.cls) && 
                 String(item.day) === String(targetDayKr) && 
@@ -305,9 +307,7 @@ def init_custom_component():
                 !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period))
             );
             
-            // 2. 심화 충돌 필터: 더블 부킹 완벽 차단
             const validCandidates = basicCandidates.filter(t2 => {
-                // A선생님(t)이 B시간(t2)으로 갈 때, 다른 반 수업이 있는지 검사
                 const conflict1 = Object.values(gridData).some(cell => 
                     String(cell.day) === String(t2.day) && 
                     Number(cell.period) === Number(t2.period) && 
@@ -315,7 +315,6 @@ def init_custom_component():
                     cell.teacher === t.teacher
                 );
                 
-                // B선생님(t2)이 A시간(t)으로 올 때, 다른 반 수업이 있는지 검사
                 const conflict2 = Object.values(gridData).some(cell => 
                     String(cell.day) === String(t.day) && 
                     Number(cell.period) === Number(t.period) && 
@@ -323,7 +322,7 @@ def init_custom_component():
                     cell.teacher === t2.teacher
                 );
                 
-                return !conflict1 && !conflict2; // 둘 다 겹치는 수업이 없어야만 합격!
+                return !conflict1 && !conflict2;
             });
             
             if(validCandidates.length === 0) {
