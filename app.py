@@ -20,13 +20,13 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 📍 URL 파라미터 자동 인식 및 상태 동기화
+# URL 파라미터 자동 인식 및 상태 동기화
 query_params = st.query_params
 if "teacher" in query_params:
     st.session_state.view_mode_val = "교사별 주간 시간표"
     st.session_state.sel_t_val = query_params["teacher"]
 
-# 2. CSS 스타일링 (프린트, 아이콘 복구, 비밀번호 은닉)
+# 2. CSS 스타일링
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -58,7 +58,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 유니버셜 스마트 그리드 컴포넌트 (모든 뷰/권한 완벽 제어)
+# 3. ⚡ 유니버셜 스마트 그리드 컴포넌트 (자기 자신 선택 차단 보정 완료)
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -127,7 +127,6 @@ def init_custom_component():
             setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.style.display="none", 300); }, 2000);
         }
 
-        // 📍 구조 완벽 분리: 전체 시간표 vs 개인 시간표 렌더링
         function renderGrid() {
             const tbody = document.getElementById("grid-body"); tbody.innerHTML = "";
             const thead_tr = document.getElementById("grid-head-tr"); thead_tr.innerHTML = "";
@@ -152,7 +151,6 @@ def init_custom_component():
                     }
                 });
             } else {
-                // 📍 교사/학급별 5x7 시간표 구조 렌더링
                 thead_tr.innerHTML = '<th style="width: 8%;">교시</th>';
                 days.forEach(d => {
                     let d_items = Object.values(gridData).filter(i => i.day === d);
@@ -189,7 +187,6 @@ def init_custom_component():
             }
         }
 
-        // 📍 내용물 그리기 모듈화
         function renderCellContent(td, key, mode) {
             if(!key || !gridData[key]) { td.innerText = "-"; return; }
             const item = gridData[key]; td.id = key;
@@ -223,7 +220,6 @@ def init_custom_component():
             }
             td.innerHTML = txt;
             
-            // 📍 권한 있을 때만 우클릭 허용
             if(allowEdit && item.subj) {
                 td.onclick = (e) => selectCell(key, td);
                 td.oncontextmenu = (e) => { e.preventDefault(); selectCell(key, td); showContextMenu(e.pageX, e.pageY); };
@@ -248,7 +244,6 @@ def init_custom_component():
             pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; 
         }
 
-        // 📍 권한에 따른 메뉴 항목 숨김 처리
         function showContextMenu(x, y) {
             const menu = document.getElementById("contextMenu");
             
@@ -304,6 +299,7 @@ def init_custom_component():
             positionPopup("crossSwapPopover");
         }
 
+        // 📍 [정밀 보정] 자기 자신의 기존 수업은 후보 드롭다운 목록에서 완벽 필터링 차단!
         function updateSwapCandidates() {
             const t = gridData[selectedKey];
             const selDate = document.getElementById("crossSwapDateInput").value;
@@ -317,15 +313,18 @@ def init_custom_component():
             const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
             const targetDayKr = dayNames[targetDayNum];
             
+            // 🚨 필터 조건 강화: 동일 날짜 + 동일 교시(자기 자신 시간) 제외!
             const candidates = Object.values(gridData).filter(item => 
-                String(item.cls) === String(t.cls) && String(item.day) === String(targetDayKr) && item.subj !== "" && item.subj !== "-"
+                String(item.cls) === String(t.cls) && 
+                String(item.day) === String(targetDayKr) && 
+                item.subj !== "" && item.subj !== "-" &&
+                !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period)) // 자기 자신 시간 제외
             );
             
             if(candidates.length === 0) {
                 candSelect.innerHTML = '<option value="">교체 가능한 수업 없음</option>';
             } else {
                 candidates.forEach(c => {
-                    if(c.date === t.date && c.period === t.period) return;
                     const opt = document.createElement("option");
                     opt.value = JSON.stringify({period2: c.period, subj2: c.subj, teacher2: c.teacher});
                     opt.innerText = `${c.period}교시 - ${c.subj} (${c.teacher})`;
@@ -626,7 +625,7 @@ def get_latest_updated_timetable(base_df, target_week_dates_dict):
 
 parsed_df = get_latest_updated_timetable(p_df, current_week_dates)
 
-# 📍 7. 공통 그리드 데이터 생성 (어느 화면이든 전체 교환 후보를 찾기 위해 풀 데이터 생성)
+# 7. 공통 풀 그리드 데이터 생성
 days_kr = ["월", "화", "수", "목", "금"]
 classes_list = sorted(parsed_df["학급"].unique()) if parsed_df is not None and not parsed_df.empty else []
 sub_dict = {(log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs}
@@ -664,7 +663,7 @@ with c_nav2:
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
     if is_admin: tab1, tab2, tab3 = st.tabs(["🗓️ 시간표 스마트 통합 관리", "🔄 교체 요청 대기(승인)", "📊 대강일지 및 통계"])
-    else: tab1, tab2 = st.tabs(["🗓️ 시간표 조회", "🔄 교체 승인 대기열 현황"]) # 수동 요청 탭 이름 변경
+    else: tab1, tab2 = st.tabs(["🗓️ 시간표 조회", "🔄 교체 승인 대기열 현황"])
 
     with tab1:
         c_v1, c_v2 = st.columns([3, 1])
@@ -695,7 +694,7 @@ if parsed_df is not None and not parsed_df.empty:
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=target_cls, allow_edit=is_admin, key="grid_class")
             
         else: 
-            # 교사별 주간 시간표 (보안 및 5x7 UI)
+            # 교사별 주간 시간표
             idx = teacher_list.index(st.session_state.sel_t_val) if st.session_state.sel_t_val in teacher_list else 0
             target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list, index=idx)
             st.session_state.sel_t_val = target_t
@@ -714,7 +713,7 @@ if parsed_df is not None and not parsed_df.empty:
 
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=target_t, allow_edit=allow_edit, key="grid_teacher")
 
-        # 📍 단일 이벤트 처리 로직 (어느 화면에서든 동작)
+        # 단일 이벤트 처리 로직
         if action_result:
             act_id = action_result.get("action_id")
             if act_id and act_id != st.session_state.last_action_id:
