@@ -30,7 +30,7 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 2. CSS 스타일링 (인쇄 전용 HTML 표시 기능 복구 포함)
+# 2. CSS 스타일링 (📱 모바일 컴팩트 최적화 추가)
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -39,20 +39,23 @@ st.markdown("""
     [data-testid="stTextInput"] button { display: none !important; }
     [data-testid="stTextInput"] label { font-weight: 800 !important; color: #0f172a !important; font-size: 14px !important; margin-bottom: 6px !important; }
     
-    /* 📍 일반 화면에서는 인쇄용 뷰를 완전히 숨김 */
     .print-only { display: none !important; }
+    
+    /* 📱 모바일 초컴팩트 세련된 디자인 최적화 */
+    @media (max-width: 768px) {
+        .block-container { padding-top: 1.2rem !important; padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+        .stButton button { padding: 4px !important; font-size: 12px !important; border-radius: 8px !important; height: auto !important; min-height: 38px !important;}
+        div[data-testid="stHorizontalBlock"] { gap: 0.3rem !important; }
+    }
 
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
         html, body { background-color: white !important; zoom: 92%; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
         header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], [data-testid="stAlert"], [data-testid="stToastContainer"], iframe, .stButton, .print-hide, h1.print-hide { display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; }
         .main, .main .block-container, [data-testid="stVerticalBlock"] { padding: 0 !important; margin: 0 !important; max-width: 100% !important; width: 100% !important; gap: 0 !important; }
-        
-        /* 📍 인쇄 시에만 인쇄 전용 뷰를 표시하고 스타일 적용 */
         .print-only { display: block !important; width: 100%; }
         .print-title { display: block !important; margin-top: 0 !important; margin-bottom: 10px !important; padding: 0 !important; text-align: center; }
         .print-title h3 { font-size: 20px !important; margin: 0 !important; color: #000 !important; font-weight: 800; }
-        
         .table-container { box-shadow: none !important; border: 2px solid #000 !important; margin: 0 !important; padding: 2px !important; page-break-inside: avoid !important; }
         .unified-table { width: 100% !important; border-collapse: collapse !important; text-align: center; font-size: 13px; }
         .unified-table th, .unified-table td { border: 1px solid #000 !important; padding: 4px; }
@@ -66,7 +69,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 컴포넌트: 모바일/PC 하단 잘림 방지 '스마트 업-팝업' 로직 탑재
+# 3. ⚡ 컴포넌트
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -76,15 +79,16 @@ def init_custom_component():
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; overflow-y: hidden; }
-        .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
+        .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; min-width: 600px; }
         .admin-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; border-radius: 10px; font-size: 13.5px; border-bottom: 2px solid #cbd5e1; }
         .admin-table td { background-color: #f8fafc; padding: 6px 2px; border-radius: 10px; height: 58px; vertical-align: middle; cursor: pointer; position: relative; }
         .admin-table td:hover { filter: brightness(0.95); outline: 2px solid #0284c7; }
         .admin-table td.selected { outline: 3px solid #ef4444 !important; background-color: #fef2f2 !important; }
-        .day-col-js { background-color: #e0f2fe !important; color: #0284c7 !important; font-weight: 800; width: 4%; border-radius: 10px; }
-        .period-col-js { background-color: #f1f5f9 !important; font-weight: 800; color: #475569; width: 5%; border-radius: 10px; }
+        .day-col-js { background-color: #e0f2fe !important; color: #0284c7 !important; font-weight: 800; width: 5%; border-radius: 10px; }
+        .period-col-js { background-color: #f1f5f9 !important; font-weight: 800; color: #475569; width: 6%; border-radius: 10px; }
         .bg-sub { background-color: #ffedd5 !important; }
         .bg-swap { background-color: #fef9c3 !important; }
         .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
@@ -137,7 +141,7 @@ def init_custom_component():
             const thead_tr = document.getElementById("grid-head-tr"); thead_tr.innerHTML = "";
 
             if(viewMode === 'FULL') {
-                thead_tr.innerHTML = '<th style="width: 4%;">요일</th><th style="width: 5%;">교시</th>';
+                thead_tr.innerHTML = '<th style="width: 5%;">요일</th><th style="width: 6%;">교시</th>';
                 classes.forEach(c => { const th = document.createElement("th"); th.innerText = c; thead_tr.appendChild(th); });
 
                 days.forEach(d => {
@@ -237,35 +241,23 @@ def init_custom_component():
             hideAllPopups();
         }
 
-        // 📍 [핵심 수정] 팝업 화면 밖(아래쪽) 잘림 방지 위치 조정 로직
         function positionPopup(popId) {
             const pop = document.getElementById(popId);
             const rect = selectedTdElement.getBoundingClientRect();
-            pop.style.display = "block"; // 렌더링 해야 높이/너비 계산 가능
-            
+            pop.style.display = "block";
             const popWidth = pop.offsetWidth || 310; 
             const popHeight = pop.offsetHeight || 250; 
-            
             let popLeft = rect.left + window.pageXOffset;
             let popTop = rect.bottom + window.pageYOffset + 5;
             
-            // X축 (오른쪽 잘림 방지)
-            if(popLeft + popWidth > window.innerWidth + window.pageXOffset) { 
-                popLeft = window.innerWidth + window.pageXOffset - popWidth - 15; 
-            }
+            if(popLeft + popWidth > window.innerWidth + window.pageXOffset) { popLeft = window.innerWidth + window.pageXOffset - popWidth - 15; }
             if(popLeft < 10) popLeft = 10;
-            
-            // Y축 (아래쪽 잘림 방지: 공간 부족 시 셀 위로 솟아오르게 처리)
-            if(popTop + popHeight > window.innerHeight + window.pageYOffset) {
-                popTop = rect.top + window.pageYOffset - popHeight - 5;
-            }
+            if(popTop + popHeight > window.innerHeight + window.pageYOffset) { popTop = rect.top + window.pageYOffset - popHeight - 5; }
             if(popTop < 10) popTop = 10;
             
-            pop.style.left = `${popLeft}px`; 
-            pop.style.top = `${popTop}px`; 
+            pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; 
         }
 
-        // 📍 컨텍스트 메뉴(우클릭 메뉴) 아래쪽 잘림 방지
         function showContextMenu(x, y) {
             const menu = document.getElementById("contextMenu");
             
@@ -286,23 +278,13 @@ def init_custom_component():
             menu.style.display = "block";
             const menuWidth = menu.offsetWidth || 200;
             const menuHeight = menu.offsetHeight || 250;
-            
-            let popLeft = x;
-            let popTop = y;
-            
-            if(x + menuWidth > window.innerWidth + window.pageXOffset) { 
-                popLeft = window.innerWidth + window.pageXOffset - menuWidth - 10; 
-            }
+            let popLeft = x; let popTop = y;
+            if(x + menuWidth > window.innerWidth + window.pageXOffset) { popLeft = window.innerWidth + window.pageXOffset - menuWidth - 10; }
             if(popLeft < 10) popLeft = 10;
-            
-            // Y축 잘림 방지
-            if(y + menuHeight > window.innerHeight + window.pageYOffset) {
-                popTop = y - menuHeight - 5; // 마우스 위쪽으로 메뉴 올리기
-            }
+            if(y + menuHeight > window.innerHeight + window.pageYOffset) { popTop = y - menuHeight - 5; }
             if(popTop < 10) popTop = 10;
             
-            menu.style.left = `${popLeft}px`; 
-            menu.style.top = `${popTop}px`; 
+            menu.style.left = `${popLeft}px`; menu.style.top = `${popTop}px`; 
         }
 
         function hideAllPopups() {
@@ -586,7 +568,7 @@ if mode == "관리자 모드 (수업교체/대강)":
         if pin == "3060": st.session_state.admin_authenticated = True; st.sidebar.success("관리자 로그인 완료!"); st.rerun()
         elif pin != "": st.sidebar.error("비밀번호가 일치하지 않습니다."); mode = "학생/교사 시간표 보기"
 
-# 6. 기초 엑셀 파싱 및 최신 반영
+# 6. 엑셀 파싱
 DEFAULT_EXCEL = "2026년 2학기 시간표.xlsx"
 if st.session_state.raw_df is None and os.path.exists(DEFAULT_EXCEL): st.session_state.raw_df = pd.read_excel(DEFAULT_EXCEL)
 
@@ -676,7 +658,7 @@ def get_latest_updated_timetable(base_df, target_week_dates_dict):
 
 parsed_df = get_latest_updated_timetable(p_df, current_week_dates)
 
-# 📍 7. 인쇄 전용 백그라운드 뷰를 위한 HTML 생성 함수 (화면엔 안 보이고 종이에만 출력)
+# 7. 인쇄 전용 백그라운드 뷰 
 def build_print_full_grid_html(df_in):
     days = ["월", "화", "수", "목", "금"]; classes = sorted(df_in["학급"].unique())
     sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
@@ -743,7 +725,7 @@ def build_print_weekly_html(all_parsed_df, title_name, filter_type="CLASS"):
         html += "</tr>"
     return html + "</tbody></table></div>"
 
-# 공통 풀 그리드 데이터 생성
+# 풀 데이터
 days_kr = ["월", "화", "수", "목", "금"]
 classes_list = sorted(parsed_df["학급"].unique()) if parsed_df is not None and not parsed_df.empty else []
 sub_dict = {(log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs}
@@ -764,24 +746,29 @@ for d in days_kr:
                     full_grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
                 else: full_grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-# 8. 상단 UI
-st.markdown(f"<h1 class='print-hide'>📅 {st.session_state.school_name} 시간표 관리 시스템</h1>", unsafe_allow_html=True)
-c_nav1, c_nav2, c_nav3 = st.columns([2, 5, 2])
-with c_nav2:
-    col_b1, col_b2, col_b3, col_b4 = st.columns([1, 2.8, 0.9, 1])
-    with col_b1: 
-        if st.button("◀ 이전주", use_container_width=True): st.session_state.week_offset -= 1; st.rerun()
-    with col_b2: st.markdown(f"<h4 class='print-hide' style='text-align: center; color: #0284c7; margin: 0;'>📆 [{mon_str} ~ {fri_str}]</h4>", unsafe_allow_html=True)
-    with col_b3: 
-        if st.button("이번주", use_container_width=True): st.session_state.week_offset = 0; st.rerun()
-    with col_b4: 
-        if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
+# 📍 8. 상단 UI (모바일 완벽 호환 컴팩트 디자인)
+st.markdown(f"""
+<div style='text-align: center; margin-bottom: 10px;'>
+    <h2 class='print-hide' style='margin:0; font-size:24px; color:#0f172a; font-weight:800; letter-spacing:-0.5px;'>📅 {st.session_state.school_name} 시간표</h2>
+    <h4 class='print-hide' style='margin:4px 0 10px 0; color:#0284c7; font-weight:700; font-size:15px;'>[{mon_str} ~ {fri_str}]</h4>
+</div>
+""", unsafe_allow_html=True)
+
+# 버튼 중앙 정렬 (1줄 강제 유지)
+col_space1, col_btn1, col_btn2, col_btn3, col_space2 = st.columns([1, 1.5, 1.2, 1.5, 1])
+with col_btn1:
+    if st.button("◀ 이전주", use_container_width=True): st.session_state.week_offset -= 1; st.rerun()
+with col_btn2:
+    if st.button("이번주", use_container_width=True): st.session_state.week_offset = 0; st.rerun()
+with col_btn3:
+    if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
+
 
 # 9. 메인 화면 렌더링
 if parsed_df is not None and not parsed_df.empty:
     is_admin = (mode == "관리자 모드 (수업교체/대강)") and st.session_state.admin_authenticated
-    if is_admin: tab1, tab2, tab3 = st.tabs(["🗓️ 시간표 스마트 통합 관리", "🔄 교체 요청 대기(승인)", "📊 대강일지 및 통계"])
-    else: tab1, tab2 = st.tabs(["🗓️ 시간표 조회", "🔄 교체 승인 대기열 현황"])
+    if is_admin: tab1, tab2, tab3 = st.tabs(["🗓️ 시간표 관리", "🔄 승인 대기", "📊 통계"])
+    else: tab1, tab2 = st.tabs(["🗓️ 시간표 조회", "🔄 교체 승인 대기열"])
 
     with tab1:
         c_v1, c_v2 = st.columns([3, 1])
@@ -792,20 +779,14 @@ if parsed_df is not None and not parsed_df.empty:
             st.session_state.view_mode_val = view_mode
         with c_v2: 
             st.write("")
-            components.html(
-                """<style>button { width: 100%; padding: 8px 14px; background-color: #0284c7; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-family: sans-serif; font-size: 13.5px; } button:hover { background-color: #0369a1; }</style>
-                <button onclick="window.parent.print()">🖨️ 시간표 인쇄 / PDF 저장</button>""", height=45
-            )
+            components.html("""<style>button { width: 100%; padding: 8px 14px; background-color: #0284c7; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-family: sans-serif; font-size: 13.5px; } button:hover { background-color: #0369a1; }</style><button onclick="window.parent.print()">🖨️ 시간표 인쇄</button>""", height=45)
 
         url_teacher = st.query_params.get("teacher", None)
         action_result = None
 
         if view_mode == "전체 시간표":
-            if is_admin:
-                st.info("💡 **스마트 사용법**: **우클릭**(자동 필터링 교체/대강 팝업창), **Ctrl+C/V**(다주차 간 복사/붙여넣기), **Delete**(즉시 빈칸 삭제)", icon="🖱️")
+            if is_admin: st.info("💡 **스마트 사용법**: **우클릭**(자동 교체/대강), **Ctrl+C/V**(복사/붙여넣기)", icon="🖱️")
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="FULL", target_name="", allow_edit=is_admin, key="grid_full")
-            
-            # 📍 인쇄 전용 백그라운드 뷰 렌더링 (화면엔 안보임)
             st.markdown(f"<div class='print-only'>{build_print_full_grid_html(parsed_df)}</div>", unsafe_allow_html=True)
 
         elif view_mode == "학급별 주간 시간표": 
@@ -813,8 +794,6 @@ if parsed_df is not None and not parsed_df.empty:
             target_cls = st.selectbox("🎯 학급 선택", classes_list, index=idx)
             st.session_state.sel_cls_val = target_cls
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=target_cls, allow_edit=is_admin, key="grid_class")
-            
-            # 📍 인쇄 전용 백그라운드 뷰 렌더링
             st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_cls, 'CLASS')}</div>", unsafe_allow_html=True)
             
         else: 
@@ -832,11 +811,9 @@ if parsed_df is not None and not parsed_df.empty:
                     st.info(f"💡 **스마트 안내**: [{target_t}] 선생님 본인의 수업을 **우클릭**하여 즉시 맞교환 요청을 보낼 수 있습니다.", icon="🖱️")
                 else:
                     allow_edit = False
-                    st.warning(f"🔒 현재 [{target_t}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크로 접속해야 교체 요청 가능)", icon="🔒")
+                    st.warning(f"🔒 현재 [{target_t}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크 접속 필요)", icon="🔒")
 
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=target_t, allow_edit=allow_edit, key="grid_teacher")
-            
-            # 📍 인쇄 전용 백그라운드 뷰 렌더링
             st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_t, 'TEACHER')}</div>", unsafe_allow_html=True)
 
         if action_result:
@@ -847,44 +824,30 @@ if parsed_df is not None and not parsed_df.empty:
                 t_item = action_result.get("target")
                 c_item = action_result.get("copiedData")
                 
-                if act == "COPY" and t_item:
-                    st.session_state.copied_data = t_item
-                    
+                if act == "COPY" and t_item: st.session_state.copied_data = t_item
                 elif act == "DELETE" and t_item:
                     t_date, t_cls, t_period = t_item["date"], t_item["cls"], int(t_item["period"])
                     save_sub_log({"날짜": t_date, "요일": t_item["day"], "교시": t_period, "학급": t_cls, "원교사": t_item["teacher"], "대강교사": "빈칸", "대강사유": "관리자 삭제", "단가": 0, "주차": st.session_state.week_offset})
                     save_cell_override(t_date, t_item["day"], t_period, t_cls, "", "")
-                    st.session_state.sub_logs = load_sub_logs()
-                    st.rerun()
-
+                    st.session_state.sub_logs = load_sub_logs(); st.rerun()
                 elif act == "SUB_DIRECT" and t_item:
                     sub_t, sub_r = action_result.get("sub_t"), action_result.get("sub_r")
                     if sub_t and sub_r:
                         save_sub_log({"날짜": t_item["date"], "요일": t_item["day"], "교시": int(t_item["period"]), "학급": t_item["cls"], "원교사": t_item["teacher"], "대강교사": sub_t, "대강사유": sub_r, "단가": st.session_state.hourly_rate, "주차": st.session_state.week_offset})
-                        st.session_state.sub_logs = load_sub_logs()
-                        st.rerun()
-
+                        st.session_state.sub_logs = load_sub_logs(); st.rerun()
                 elif act == "EXECUTE_CROSS_SWAP" and t_item:
-                    s_date2 = action_result.get("s_date2")
-                    period2 = int(action_result.get("period2"))
-                    subj2 = action_result.get("subj2")
-                    teacher2 = action_result.get("teacher2")
+                    s_date2 = action_result.get("s_date2"); period2 = int(action_result.get("period2"))
+                    subj2 = action_result.get("subj2"); teacher2 = action_result.get("teacher2")
                     is_admin_act = action_result.get("is_admin_action", False)
-                    
-                    save_swap_request({
-                        "cls1": t_item["cls"], "date1": t_item["date"], "period1": int(t_item["period"]), "subj1": t_item["subj"], "teacher1": t_item["teacher"],
-                        "cls2": t_item["cls"], "date2": s_date2, "period2": period2, "subj2": subj2, "teacher2": teacher2
-                    }, auto_approve=is_admin_act)
+                    save_swap_request({"cls1": t_item["cls"], "date1": t_item["date"], "period1": int(t_item["period"]), "subj1": t_item["subj"], "teacher1": t_item["teacher"], "cls2": t_item["cls"], "date2": s_date2, "period2": period2, "subj2": subj2, "teacher2": teacher2}, auto_approve=is_admin_act)
                     st.session_state.swap_logs = load_swap_logs("APPROVED")
                     if is_admin_act: st.toast("🔀 스마트 수업 맞교환 즉시 확정!")
                     else: st.toast("📩 관리자에게 수업 맞교환 승인 요청이 성공적으로 전달되었습니다!")
                     st.rerun()
-
                 elif act in ["PASTE_OVERWRITE", "PASTE_SWAP"] and c_item and t_item:
                     t_date, t_cls, t_period = t_item["date"], t_item["cls"], int(t_item["period"])
                     c_teacher, c_subj = c_item["teacher"], c_item["subj"]
                     conflict = parsed_df[(parsed_df["교사"] == c_teacher) & (parsed_df["요일"] == t_item["day"]) & (parsed_df["교시"] == t_period) & (parsed_df["학급"] != t_cls)]
-                    
                     if not conflict.empty: st.toast(f"⚠️ 중복! {c_teacher} 선생님은 해당 시간에 이미 수업이 있습니다.")
                     else:
                         if act == "PASTE_OVERWRITE": save_cell_override(t_date, t_item["day"], t_period, t_cls, c_subj, c_teacher)
@@ -907,12 +870,9 @@ if parsed_df is not None and not parsed_df.empty:
                 with c_p2:
                     if is_admin:
                         if st.button("✅ 승인 실행", key=f"app_{p_row['id']}"):
-                            approve_swap_request(p_row['id'])
-                            st.session_state.swap_logs = load_swap_logs("APPROVED")
-                            st.success("승인되었습니다!")
-                            st.rerun()
-                    else:
-                        st.button("승인 대기중", key=f"wait_{p_row['id']}", disabled=True)
+                            approve_swap_request(p_row['id']); st.session_state.swap_logs = load_swap_logs("APPROVED")
+                            st.success("승인되었습니다!"); st.rerun()
+                    else: st.button("승인 대기중", key=f"wait_{p_row['id']}", disabled=True)
         else: st.success("현재 대기 중인 교체 요청이 없습니다.")
 
     if is_admin:
