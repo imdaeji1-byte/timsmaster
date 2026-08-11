@@ -20,7 +20,7 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# URL 파라미터 자동 인식 및 상태 동기화
+# URL 파라미터 자동 인식
 query_params = st.query_params
 if "teacher" in query_params:
     st.session_state.view_mode_val = "교사별 주간 시간표"
@@ -30,27 +30,14 @@ if "teacher" in query_params:
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    
-    html, body, p, div, h1, h2, h3, h4, h5, h6, a, label, input, button, table, th, td { 
-        font-family: 'Pretendard', -apple-system, sans-serif; 
-    }
-    
-    .material-symbols-rounded, .material-icons, span[class*="material"], [data-testid="stIconMaterial"], i {
-        font-family: 'Material Symbols Rounded', 'Material Icons' !important;
-        font-size: 24px !important; color: #64748b !important;
-    }
-    
+    html, body, p, div, h1, h2, h3, h4, h5, h6, a, label, input, button, table, th, td { font-family: 'Pretendard', -apple-system, sans-serif; }
+    .material-symbols-rounded, .material-icons, span[class*="material"], [data-testid="stIconMaterial"], i { font-family: 'Material Symbols Rounded', 'Material Icons' !important; font-size: 24px !important; color: #64748b !important; }
     [data-testid="stTextInput"] button { display: none !important; }
     [data-testid="stTextInput"] label { font-weight: 800 !important; color: #0f172a !important; font-size: 14px !important; margin-bottom: 6px !important; }
-
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
         html, body { background-color: white !important; zoom: 92%; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
-        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], 
-        [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], 
-        [data-testid="stAlert"], [data-testid="stToastContainer"], iframe, .stButton, .print-hide, h1.print-hide { 
-            display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;
-        }
+        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], [data-testid="stAlert"], [data-testid="stToastContainer"], iframe, .stButton, .print-hide, h1.print-hide { display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; }
         .main, .main .block-container, [data-testid="stVerticalBlock"] { padding: 0 !important; margin: 0 !important; max-width: 100% !important; width: 100% !important; gap: 0 !important; }
         .print-title { display: block !important; margin-top: 0 !important; margin-bottom: 10px !important; padding: 0 !important; }
         .print-title h3 { font-size: 20px !important; margin: 0 !important; color: #000 !important; }
@@ -58,7 +45,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 유니버셜 스마트 그리드 컴포넌트 (자기 자신 선택 차단 보정 완료)
+# 3. ⚡ 컴포넌트: 양방향 시수 중복 필터링 완벽 구현
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -79,19 +66,16 @@ def init_custom_component():
         .period-col-js { background-color: #f1f5f9 !important; font-weight: 800; color: #475569; width: 5%; border-radius: 10px; }
         .bg-sub { background-color: #ffedd5 !important; }
         .bg-swap { background-color: #fef9c3 !important; }
-        
         .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
         .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 700; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
         .context-menu-item:hover { background-color: #f1f5f9; color: #0284c7; }
         .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
-        
         .popover { display: none; position: absolute; background: white; border: 2.5px solid #0284c7; border-radius: 16px; padding: 14px; width: 280px; box-shadow: 0 12px 30px rgba(0,0,0,0.18); z-index: 10001; text-align: left; }
         .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 9px; border: none; border-radius: 10px; font-weight: bold; font-size: 12.5px; cursor: pointer; text-align: center; }
         .btn-primary { background: #0284c7; color: white; }
         .btn-swap { background: #eab308; color: white; }
         .btn-close { background: #94a3b8; color: white; margin-top: 6px; }
         .pop-input { width: 95%; padding: 7px; margin: 5px 0 10px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; box-sizing: border-box; }
-        
         #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: none; z-index: 100000; transition: opacity 0.3s; }
     </style>
     <script>
@@ -299,7 +283,7 @@ def init_custom_component():
             positionPopup("crossSwapPopover");
         }
 
-        // 📍 [정밀 보정] 자기 자신의 기존 수업은 후보 드롭다운 목록에서 완벽 필터링 차단!
+        // 📍 양방향 시수 중복 필터링 핵심 로직
         function updateSwapCandidates() {
             const t = gridData[selectedKey];
             const selDate = document.getElementById("crossSwapDateInput").value;
@@ -313,18 +297,39 @@ def init_custom_component():
             const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
             const targetDayKr = dayNames[targetDayNum];
             
-            // 🚨 필터 조건 강화: 동일 날짜 + 동일 교시(자기 자신 시간) 제외!
-            const candidates = Object.values(gridData).filter(item => 
+            // 1. 기본 후보: 같은 반, 선택 요일, 자기 자신 제외
+            const basicCandidates = Object.values(gridData).filter(item => 
                 String(item.cls) === String(t.cls) && 
                 String(item.day) === String(targetDayKr) && 
                 item.subj !== "" && item.subj !== "-" &&
-                !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period)) // 자기 자신 시간 제외
+                !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period))
             );
             
-            if(candidates.length === 0) {
-                candSelect.innerHTML = '<option value="">교체 가능한 수업 없음</option>';
+            // 2. 심화 충돌 필터: 더블 부킹 완벽 차단
+            const validCandidates = basicCandidates.filter(t2 => {
+                // A선생님(t)이 B시간(t2)으로 갈 때, 다른 반 수업이 있는지 검사
+                const conflict1 = Object.values(gridData).some(cell => 
+                    String(cell.day) === String(t2.day) && 
+                    Number(cell.period) === Number(t2.period) && 
+                    String(cell.cls) !== String(t.cls) && 
+                    cell.teacher === t.teacher
+                );
+                
+                // B선생님(t2)이 A시간(t)으로 올 때, 다른 반 수업이 있는지 검사
+                const conflict2 = Object.values(gridData).some(cell => 
+                    String(cell.day) === String(t.day) && 
+                    Number(cell.period) === Number(t.period) && 
+                    String(cell.cls) !== String(t2.cls) && 
+                    cell.teacher === t2.teacher
+                );
+                
+                return !conflict1 && !conflict2; // 둘 다 겹치는 수업이 없어야만 합격!
+            });
+            
+            if(validCandidates.length === 0) {
+                candSelect.innerHTML = '<option value="">충돌 없는 교체 후보가 없습니다.</option>';
             } else {
-                candidates.forEach(c => {
+                validCandidates.forEach(c => {
                     const opt = document.createElement("option");
                     opt.value = JSON.stringify({period2: c.period, subj2: c.subj, teacher2: c.teacher});
                     opt.innerText = `${c.period}교시 - ${c.subj} (${c.teacher})`;
@@ -694,7 +699,6 @@ if parsed_df is not None and not parsed_df.empty:
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=target_cls, allow_edit=is_admin, key="grid_class")
             
         else: 
-            # 교사별 주간 시간표
             idx = teacher_list.index(st.session_state.sel_t_val) if st.session_state.sel_t_val in teacher_list else 0
             target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list, index=idx)
             st.session_state.sel_t_val = target_t
@@ -713,7 +717,6 @@ if parsed_df is not None and not parsed_df.empty:
 
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=target_t, allow_edit=allow_edit, key="grid_teacher")
 
-        # 단일 이벤트 처리 로직
         if action_result:
             act_id = action_result.get("action_id")
             if act_id and act_id != st.session_state.last_action_id:
