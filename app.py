@@ -16,7 +16,7 @@ if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 if "raw_df" not in st.session_state: st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 
-# 📍 [핵심 수정] URL 파라미터(?teacher=이름) 감지 최우선 강제 세션 처리
+# URL 파라미터 자동 인식 및 상태 동기화
 try:
     url_params = st.query_params
     if "teacher" in url_params:
@@ -49,7 +49,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 컴포넌트
+# 3. ⚡ 컴포넌트: 본인 수업 목록에서 아예 제거 로직 추가
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -300,11 +300,13 @@ def init_custom_component():
             const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
             const targetDayKr = dayNames[targetDayNum];
             
+            // 📍 [핵심 수정] 기준 수업 교사(자신)와 동일한 교사의 수업은 후보에서 원천 차단!
             const basicCandidates = Object.values(gridData).filter(item => 
                 String(item.cls) === String(t.cls) && 
                 String(item.day) === String(targetDayKr) && 
                 item.subj !== "" && item.subj !== "-" &&
-                !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period))
+                !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period)) &&
+                String(item.teacher) !== String(t.teacher) // 내 수업(다른 교시 포함) 아예 목록에서 제거
             );
             
             const validCandidates = basicCandidates.filter(t2 => {
