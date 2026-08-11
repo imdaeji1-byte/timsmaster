@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 기본 설정 및 세션 초기화
 st.set_page_config(page_title="TimeMaster - 모던 시간표 시스템", layout="wide")
 
-# 🚨 1단계 핵심 수정: 버튼을 눌러도 튕기지 않도록 URL 변수를 무조건 최상단에 고정
+# 🚨 에러 방지: URL 파라미터를 가장 먼저 안전하게 가져옵니다.
 url_teacher = st.query_params.get("teacher", None)
 
 if "copied_data" not in st.session_state: st.session_state.copied_data = None
@@ -30,10 +30,9 @@ if url_teacher:
         st.session_state.sel_t_val = url_teacher
         st.session_state.url_teacher_applied = True
 
-# 2. CSS 스타일링 (Share, Manage app 버튼 숨김 적용 완료)
+# 2. CSS 스타일링 (Share 숨김 및 UI 최적화)
 st.markdown("""
 <style>
-    /* 상단 Share, 별표 메뉴 및 하단 Manage app 버튼 완벽 숨김 */
     header[data-testid="stHeader"] { display: none !important; visibility: hidden !important; height: 0px !important; }
     footer { display: none !important; visibility: hidden !important; }
     .stDeployButton, [data-testid="manage-app-button"], #MainMenu { display: none !important; }
@@ -45,7 +44,36 @@ st.markdown("""
     
     .print-only { display: none !important; }
     
-    /* 🖨️ 인쇄 전용 CSS */
+    .main-title { font-size: 32px !important; color: #0f172a; font-weight: 900 !important; letter-spacing: -1px; }
+    .main-subtitle { font-size: 18px !important; color: #0284c7; font-weight: 800 !important; }
+    .print-btn-top { position: absolute; right: 0px; top: 10px; padding: 6px 14px; background-color: #f8fafc; color: #475569; border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .print-btn-top:hover { background-color: #e2e8f0; color: #0f172a; }
+
+    div[role="radiogroup"] label { padding: 8px 16px !important; background-color: #f1f5f9; border-radius: 10px; margin-right: 5px; cursor: pointer; }
+
+    @media (max-width: 768px) {
+        .block-container { padding-top: 1rem !important; padding-left: 0.2rem !important; padding-right: 0.2rem !important; }
+        .main-title { font-size: 22px !important; letter-spacing: -0.5px !important; margin-bottom: 2px !important; }
+        .main-subtitle { font-size: 13.5px !important; margin-bottom: 5px !important; }
+        .print-btn-top { top: 0px; padding: 4px 8px; font-size: 11.5px; border-radius: 6px; }
+        
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) { flex-wrap: nowrap !important; align-items: center !important; gap: 0.2rem !important; }
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div[data-testid="column"] { min-width: 0 !important; }
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(1),
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(5) { flex: 0.3 1 0px !important; }
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(2),
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(3),
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(4) { flex: 1 1 0px !important; }
+        
+        .stButton button { padding: 4px 0px !important; font-size: 12px !important; font-weight: 800 !important; border-radius: 8px !important; height: auto !important; min-height: 38px !important; white-space: nowrap !important; width: 100% !important; }
+        
+        div[role="radiogroup"] { flex-wrap: nowrap !important; gap: 3px !important; width: 100% !important; display: flex !important; margin-bottom: 5px !important; }
+        div[role="radiogroup"] label { padding: 6px 0px !important; margin: 0 !important; flex: 1 1 0px !important; display: flex !important; justify-content: center !important; background-color: #f1f5f9; border-radius: 8px; }
+        div[role="radiogroup"] p { font-size: 11px !important; font-weight: 800 !important; letter-spacing: -1.2px !important; white-space: nowrap !important; text-align: center !important; color: #334155; margin:0; }
+        
+        iframe { width: 100% !important; border: none !important; }
+    }
+
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
         html, body { background-color: white !important; zoom: 92%; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
@@ -67,7 +95,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 우클릭 커스텀 컴포넌트
+# 3. ⚡ 대강 인식 기능이 탑재된 스마트 그리드 JS
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -138,6 +166,12 @@ def init_custom_component():
             const toast = document.getElementById("jsToast");
             toast.innerText = msg; toast.style.display = "block"; toast.style.opacity = "1";
             setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.style.display="none", 300); }, 2000);
+        }
+        
+        // 📍 핵심: 셀의 "실질적인 교사(대강 교사 우선)"를 반환하는 함수
+        function getEffectiveTeacher(item) {
+            if (!item) return "";
+            return (item.is_sub && item.sub_teacher && item.sub_teacher !== "빈칸") ? item.sub_teacher : item.teacher;
         }
 
         function renderGrid() {
@@ -304,7 +338,8 @@ def init_custom_component():
         function openPastePopover() {
             hideAllPopups();
             if(!copiedData || !selectedKey) return;
-            document.getElementById("pastePopInfo").innerHTML = `복사: <b>${copiedData.subj}(${copiedData.teacher})</b><br>대상: <b>[${gridData[selectedKey].cls}] ${gridData[selectedKey].day} ${gridData[selectedKey].period}교시</b>`;
+            const effT = getEffectiveTeacher(copiedData);
+            document.getElementById("pastePopInfo").innerHTML = `복사: <b>${copiedData.subj}(${effT})</b><br>대상: <b>[${gridData[selectedKey].cls}] ${gridData[selectedKey].day} ${gridData[selectedKey].period}교시</b>`;
             positionPopup("pastePopover");
         }
 
@@ -316,7 +351,10 @@ def init_custom_component():
             
             const btnText = isAdmin ? "✅ 맞교환 즉시 확정" : "📩 맞교환 승인 요청하기";
             document.getElementById("swapSubmitBtn").innerText = btnText;
-            document.getElementById("crossSwapPopInfo").innerHTML = `교체 기준: <b>[${t.cls}] ${t.subj}(${t.teacher})</b>`;
+            
+            // 📍 대강 교사가 팝업창에 제대로 표시되도록 수정
+            const effT = getEffectiveTeacher(t);
+            document.getElementById("crossSwapPopInfo").innerHTML = `교체 기준: <b>[${t.cls}] ${t.subj}(${effT})</b>`;
             
             const dInput = document.getElementById("crossSwapDateInput");
             dInput.value = t.date;
@@ -337,27 +375,38 @@ def init_custom_component():
             const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
             const targetDayKr = dayNames[targetDayNum];
             
-            const basicCandidates = Object.values(gridData).filter(item => 
-                String(item.cls) === String(t.cls) && 
-                String(item.day) === String(targetDayKr) && 
-                item.subj !== "" && item.subj !== "-" &&
-                !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period)) &&
-                String(item.teacher) !== String(t.teacher)
-            );
+            const effT = getEffectiveTeacher(t);
+            
+            // 📍 후보 필터링 시에도 대강 교사를 기준으로 중복 검사
+            const basicCandidates = Object.values(gridData).filter(item => {
+                const effItem = getEffectiveTeacher(item);
+                return String(item.cls) === String(t.cls) && 
+                       String(item.day) === String(targetDayKr) && 
+                       item.subj !== "" && item.subj !== "-" &&
+                       !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period)) &&
+                       String(effItem) !== String(effT);
+            });
             
             const validCandidates = basicCandidates.filter(t2 => {
-                const conflict1 = Object.values(gridData).some(cell => 
-                    String(cell.day) === String(t2.day) && 
-                    Number(cell.period) === Number(t2.period) && 
-                    String(cell.cls) !== String(t.cls) && 
-                    cell.teacher === t.teacher
-                );
-                const conflict2 = Object.values(gridData).some(cell => 
-                    String(cell.day) === String(t.day) && 
-                    Number(cell.period) === Number(t.period) && 
-                    String(cell.cls) !== String(t2.cls) && 
-                    cell.teacher === t2.teacher
-                );
+                const effT2 = getEffectiveTeacher(t2);
+                
+                const conflict1 = Object.values(gridData).some(cell => {
+                    if (String(cell.date) === String(t2.date) && Number(cell.period) === Number(t2.period)) return false;
+                    const effCell = getEffectiveTeacher(cell);
+                    return String(cell.day) === String(t2.day) && 
+                           Number(cell.period) === Number(t2.period) && 
+                           String(cell.cls) !== String(t.cls) && 
+                           effCell === effT; // effT가 t2 자리로 갈 때 다른반 겹치는지
+                });
+                
+                const conflict2 = Object.values(gridData).some(cell => {
+                    if (String(cell.date) === String(t.date) && Number(cell.period) === Number(t.period)) return false;
+                    const effCell = getEffectiveTeacher(cell);
+                    return String(cell.day) === String(t.day) && 
+                           Number(cell.period) === Number(t.period) && 
+                           String(cell.cls) !== String(t2.cls) && 
+                           effCell === effT2; // effT2가 t 자리로 올 때 다른반 겹치는지
+                });
                 return !conflict1 && !conflict2;
             });
             
@@ -365,9 +414,11 @@ def init_custom_component():
                 candSelect.innerHTML = '<option value="">충돌 없는 교체 후보가 없습니다.</option>';
             } else {
                 validCandidates.forEach(c => {
+                    const effC = getEffectiveTeacher(c);
                     const opt = document.createElement("option");
+                    // 파이썬으로 보낼때는 원교사 정보 유지(DB 베이스 교체용)
                     opt.value = JSON.stringify({period2: c.period, subj2: c.subj, teacher2: c.teacher});
-                    opt.innerText = `${c.period}교시 - ${c.subj} (${c.teacher})`;
+                    opt.innerText = `${c.period}교시 - ${c.subj} (${effC})`;
                     candSelect.appendChild(opt);
                 });
             }
@@ -401,7 +452,7 @@ def init_custom_component():
 
         function copyCurrentCell() {
             const t = gridData[selectedKey];
-            if(t && t.subj) { copiedData = t; showToast(`📋 복사 완료: ${t.subj}(${t.teacher})`); dispatchAction("COPY"); } 
+            if(t && t.subj) { copiedData = t; const effT = getEffectiveTeacher(t); showToast(`📋 복사 완료: ${t.subj}(${effT})`); dispatchAction("COPY"); } 
             else { showToast("⚠️ 빈 셀은 복사 불가"); hideAllPopups(); }
         }
 
@@ -523,20 +574,45 @@ def load_swap_logs(status_filter="APPROVED"):
     finally: conn.close()
     return logs
 
-def save_swap_request(log, auto_approve=True):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    status = 'APPROVED' if auto_approve else 'PENDING'
-    c.execute("INSERT INTO swap_logs (cls1, date1, period1, subj1, teacher1, cls2, date2, period2, subj2, teacher2, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (log["cls1"], log["date1"], log["period1"], log["subj1"], log["teacher1"], log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"], status))
-    conn.commit()
-    conn.close()
-
+# 📍 대강 내역 스마트 이사 로직 적용 (DB 업데이트)
 def approve_swap_request(req_id):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    
+    # 1. 교환될 날짜/교시 정보 가져오기
+    c.execute("SELECT cls1, date1, period1, date2, period2 FROM swap_logs WHERE id = ?", (req_id,))
+    row = c.fetchone()
+    
+    if row:
+        cls, d1, p1, d2, p2 = row
+        day_kr1 = ["월","화","수","목","금"][pd.to_datetime(d1).weekday()]
+        day_kr2 = ["월","화","수","목","금"][pd.to_datetime(d2).weekday()]
+        
+        # 2. 대강 내역(sub_logs)이 있다면 함께 시간 옮겨주기
+        c.execute("SELECT id FROM sub_logs WHERE s_date=? AND t_cls=? AND s_period=?", (d1, cls, p1))
+        sub1 = c.fetchone()
+        c.execute("SELECT id FROM sub_logs WHERE s_date=? AND t_cls=? AND s_period=?", (d2, cls, p2))
+        sub2 = c.fetchone()
+        
+        if sub1: c.execute("UPDATE sub_logs SET s_date='TEMP', s_period=99 WHERE id=?", (sub1[0],))
+        if sub2: c.execute("UPDATE sub_logs SET s_date=?, s_day=?, s_period=? WHERE id=?", (d1, day_kr1, p1, sub2[0]))
+        if sub1: c.execute("UPDATE sub_logs SET s_date=?, s_day=?, s_period=? WHERE id=?", (d2, day_kr2, p2, sub1[0]))
+        
     c.execute("UPDATE swap_logs SET status = 'APPROVED' WHERE id = ?", (req_id,))
     conn.commit()
     conn.close()
+
+def save_swap_request(log, auto_approve=True):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO swap_logs (cls1, date1, period1, subj1, teacher1, cls2, date2, period2, subj2, teacher2, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')", 
+              (log["cls1"], log["date1"], log["period1"], log["subj1"], log["teacher1"], log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"]))
+    req_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    
+    # 관리자가 교체하면 즉시 승인 및 대강 이동 처리
+    if auto_approve: approve_swap_request(req_id)
 
 def clear_all_db():
     conn = sqlite3.connect(DB_FILE)
@@ -566,9 +642,9 @@ def get_week_dates(offset=0):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_dates["금"].strftime("%Y-%m-%d")
 
-# 5. 사이드바 메뉴
+# 5. 사이드바 메뉴 
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
-if "teacher" in st.query_params: mode = "학생/교사 시간표 보기"
+if url_teacher: mode = "학생/교사 시간표 보기"
 else: mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 
 if mode == "관리자 모드 (수업교체/대강)":
@@ -724,7 +800,7 @@ def build_print_weekly_html(all_parsed_df, title_name, filter_type="CLASS"):
         html += "</tr>"
     return html + "</tbody></table></div>"
 
-# 풀 데이터
+# 풀 데이터 생성
 days_kr = ["월", "화", "수", "목", "금"]
 classes_list = sorted(parsed_df["학급"].unique()) if parsed_df is not None and not parsed_df.empty else []
 sub_dict = {(log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs}
@@ -745,17 +821,23 @@ for d in days_kr:
                     full_grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
                 else: full_grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-# 8. 상단 UI (안정적인 레이아웃)
-st.markdown(f"<h1 class='print-hide' style='text-align: center;'>🏫 {st.session_state.school_name} 시간표</h1>", unsafe_allow_html=True)
-st.markdown(f"<h4 class='print-hide' style='text-align: center; color: #0284c7;'>[{mon_str} ~ {fri_str}]</h4>", unsafe_allow_html=True)
+# 8. 상단 UI 배치
+st.markdown(f"""
+<div style='position: relative; text-align: center; margin-bottom: 5px; padding-top: 5px;'>
+    <h2 class='print-hide main-title' style='margin:0;'>🏫 {st.session_state.school_name} 시간표</h2>
+    <h4 class='print-hide main-subtitle' style='margin:4px 0 10px 0;'>[{mon_str} ~ {fri_str}]</h4>
+    <button class="print-hide print-btn-top" onclick="window.parent.print()">🖨️ 시간표 인쇄</button>
+</div>
+""", unsafe_allow_html=True)
 
-col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+col_sp1, col_btn1, col_btn2, col_btn3, col_sp2 = st.columns([1, 1.2, 1, 1.2, 1])
 with col_btn1:
     if st.button("◀ 이전주", use_container_width=True): st.session_state.week_offset -= 1; st.rerun()
 with col_btn2:
     if st.button("이번주", use_container_width=True): st.session_state.week_offset = 0; st.rerun()
 with col_btn3:
     if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
+
 
 # 9. 메인 화면 렌더링
 if parsed_df is not None and not parsed_df.empty:
@@ -764,49 +846,55 @@ if parsed_df is not None and not parsed_df.empty:
     else: tab1, tab2 = st.tabs(["🗓️ 시간표 조회", "🔄 교체 승인 대기열"])
 
     with tab1:
-        c_v1, c_v2 = st.columns([3, 1])
-        with c_v1:
-            view_opts = ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"]
-            view_idx = view_opts.index(st.session_state.view_mode_val) if st.session_state.view_mode_val in view_opts else 0
-            view_mode = st.radio("조회 방식", view_opts, index=view_idx, horizontal=True)
+        if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
+        view_mode = st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], index=["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"].index(st.session_state.view_mode_val), horizontal=True, label_visibility="collapsed")
+        
+        if view_mode != st.session_state.view_mode_val:
             st.session_state.view_mode_val = view_mode
-        with c_v2: 
-            st.write("")
-            components.html("""<style>button { width: 100%; padding: 8px 14px; background-color: #0284c7; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-family: sans-serif; font-size: 13.5px; } button:hover { background-color: #0369a1; }</style><button onclick="window.parent.print()">🖨️ 시간표 인쇄</button>""", height=45)
+            st.rerun()
 
         action_result = None
 
-        if view_mode == "전체 시간표":
+        if st.session_state.view_mode_val == "전체 시간표":
             if is_admin: st.info("💡 **스마트 사용법**: **우클릭**(자동 교체/대강), **Ctrl+C/V**(복사/붙여넣기)", icon="🖱️")
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="FULL", target_name="", allow_edit=is_admin, key="grid_full")
             st.markdown(f"<div class='print-only'>{build_print_full_grid_html(parsed_df)}</div>", unsafe_allow_html=True)
 
-        elif view_mode == "학급별 주간 시간표": 
-            idx = classes_list.index(st.session_state.sel_cls_val) if st.session_state.sel_cls_val in classes_list else 0
-            target_cls = st.selectbox("🎯 학급 선택", classes_list, index=idx)
-            st.session_state.sel_cls_val = target_cls
-            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=target_cls, allow_edit=is_admin, key="grid_class")
-            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_cls, 'CLASS')}</div>", unsafe_allow_html=True)
+        elif st.session_state.view_mode_val == "학급별 주간 시간표": 
+            if "sel_cls_val" not in st.session_state or st.session_state.sel_cls_val not in classes_list:
+                st.session_state.sel_cls_val = classes_list[0] if classes_list else None
+            
+            target_cls = st.selectbox("🎯 학급 선택", classes_list, index=classes_list.index(st.session_state.sel_cls_val))
+            if target_cls != st.session_state.sel_cls_val:
+                st.session_state.sel_cls_val = target_cls
+                st.rerun()
+            
+            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=st.session_state.sel_cls_val, allow_edit=is_admin, key="grid_class")
+            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, st.session_state.sel_cls_val, 'CLASS')}</div>", unsafe_allow_html=True)
             
         else: 
-            idx = teacher_list.index(st.session_state.sel_t_val) if st.session_state.sel_t_val in teacher_list else 0
-            target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list, index=idx)
-            st.session_state.sel_t_val = target_t
+            if "sel_t_val" not in st.session_state or st.session_state.sel_t_val not in teacher_list:
+                st.session_state.sel_t_val = teacher_list[0] if teacher_list else None
+            
+            target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list, index=teacher_list.index(st.session_state.sel_t_val))
+            if target_t != st.session_state.sel_t_val:
+                st.session_state.sel_t_val = target_t
+                st.rerun()
             
             allow_edit = False
             if is_admin:
                 allow_edit = True
                 st.info("💡 **관리자 권한**: 해당 선생님의 수업을 우클릭하여 즉시 교체 및 수정할 수 있습니다.", icon="👑")
             else:
-                if url_teacher and url_teacher == target_t:
+                if url_teacher and url_teacher == st.session_state.sel_t_val:
                     allow_edit = True
                     st.info(f"💡 **스마트 안내**: 본인의 수업을 **우클릭**하여 즉시 맞교환 요청을 보낼 수 있습니다.", icon="🖱️")
                 else:
                     allow_edit = False
-                    st.warning(f"🔒 현재 [{target_t}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크 접속 필요)", icon="🔒")
+                    st.warning(f"🔒 현재 [{st.session_state.sel_t_val}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크 접속 필요)", icon="🔒")
 
-            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=target_t, allow_edit=allow_edit, key="grid_teacher")
-            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_t, 'TEACHER')}</div>", unsafe_allow_html=True)
+            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=st.session_state.sel_t_val, allow_edit=allow_edit, key="grid_teacher")
+            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, st.session_state.sel_t_val, 'TEACHER')}</div>", unsafe_allow_html=True)
 
         if action_result:
             act_id = action_result.get("action_id")
