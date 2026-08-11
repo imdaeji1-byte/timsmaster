@@ -5,10 +5,33 @@ import os
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta, date
 
-# 1. 페이지 기본 설정
+# 1. 페이지 기본 설정 및 세션 초기화
 st.set_page_config(page_title="TimeMaster - 모던 시간표 시스템", layout="wide")
 
-# 2. CSS 스타일링 (3, 4번 상/하단 메뉴 숨김 및 1, 2번 반응형 디자인 최적화)
+# 🚨 이전 코드에서 통째로 누락되었던 필수 초기화 세팅 복구 🚨
+if "copied_data" not in st.session_state: st.session_state.copied_data = None
+if "last_action_id" not in st.session_state: st.session_state.last_action_id = None
+if "school_name" not in st.session_state: st.session_state.school_name = "경남해양고등학교"
+if "hourly_rate" not in st.session_state: st.session_state.hourly_rate = 13000
+if "week_offset" not in st.session_state: st.session_state.week_offset = 0
+if "raw_df" not in st.session_state: st.session_state.raw_df = None
+if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
+
+# URL 파라미터 자동 인식 및 상태 동기화
+try:
+    url_params = st.query_params
+    if "teacher" in url_params:
+        target_teacher_name = url_params["teacher"]
+        st.session_state["view_mode_val"] = "교사별 주간 시간표"
+        st.session_state["sel_t_val"] = target_teacher_name
+except Exception as e:
+    pass
+
+if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
+if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
+if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
+
+# 2. CSS 스타일링 (상/하단 메뉴 숨김 및 모바일 반응형 디자인 최적화)
 st.markdown("""
 <style>
     /* 📍 상단 메뉴(Share 등) 및 하단 Manage app 버튼 완벽 숨김 */
@@ -208,7 +231,7 @@ def init_custom_component():
                 } else if(mode === 'TEACHER') {
                     if(item.is_sub) {
                         if(item.sub_teacher === targetName) txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">📝대강 [${item.cls}]</span><br><b style="font-size:13px;">${item.subj}</b>`;
-                        else txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">📝대강 (${item.sub_teacher})</span><br><b style="font-size:13px;">${item.subj}</b>`;
+                        else txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">📝대강 (${item.sub_teacher})</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;"><s>${item.teacher}</s> ➔ <b>${item.sub_teacher}</b></span>`;
                     } else if(item.is_swapped) {
                         txt = `<span style="font-size:9px; background:#eab308; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">🔄교체됨</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">[${item.cls}]</span>`;
                     } else {
@@ -217,7 +240,7 @@ def init_custom_component():
                 } else if(mode === 'CLASS') {
                     if(item.is_sub) {
                         let st = item.sub_teacher === "빈칸" ? "" : item.sub_teacher;
-                        txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">📝대강 (${st})</span><br><b style="font-size:13px;">${item.subj}</b>`;
+                        txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">📝대강 (${st})</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;"><s>${item.teacher}</s> ➔ <b>${st}</b></span>`;
                     } else if(item.is_swapped) {
                         txt = `<span style="font-size:9px; background:#eab308; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">🔄교체됨</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">(${item.teacher})</span>`;
                     } else {
@@ -559,7 +582,6 @@ mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_
 
 # 5. 사이드바 메뉴 (관리자)
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
-# URL 파라미터가 있으면 자동으로 "일반 모드"로 고정해서 편리함 제공
 if "teacher" in st.query_params: mode = "학생/교사 시간표 보기"
 else: mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 
@@ -754,7 +776,7 @@ with col_btn2:
 with col_btn3:
     if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
 
-# URL 파라미터 강제 처리 (여기서 수행)
+# URL 파라미터 강제 처리
 url_teacher = st.query_params.get("teacher", None)
 if url_teacher and url_teacher in teacher_list:
     if "url_teacher_applied" not in st.session_state:
@@ -771,9 +793,12 @@ if parsed_df is not None and not parsed_df.empty:
     with tab1:
         c_v1, c_v2 = st.columns([3, 1])
         with c_v1:
-            # 📍 5. 라디오 버튼 더블 클릭 문제 완벽 해결 (Native Key Binding)
             if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
-            view_mode = st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], key="view_mode_val", horizontal=True)
+            # 📍 5. 버튼을 누르면 state 업데이트 후 즉시 rerun시켜서 딜레이 방지
+            view_mode = st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], index=["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"].index(st.session_state.view_mode_val), horizontal=True)
+            if view_mode != st.session_state.view_mode_val:
+                st.session_state.view_mode_val = view_mode
+                st.rerun()
             
         with c_v2: 
             st.write("")
@@ -781,40 +806,48 @@ if parsed_df is not None and not parsed_df.empty:
 
         action_result = None
 
-        if view_mode == "전체 시간표":
+        if st.session_state.view_mode_val == "전체 시간표":
             if is_admin: st.info("💡 **스마트 사용법**: **우클릭**(자동 교체/대강), **Ctrl+C/V**(복사/붙여넣기)", icon="🖱️")
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="FULL", target_name="", allow_edit=is_admin, key="grid_full")
             st.markdown(f"<div class='print-only'>{build_print_full_grid_html(parsed_df)}</div>", unsafe_allow_html=True)
 
-        elif view_mode == "학급별 주간 시간표": 
-            # Selectbox 더블 클릭 완벽 해결
+        elif st.session_state.view_mode_val == "학급별 주간 시간표": 
             if "sel_cls_val" not in st.session_state or st.session_state.sel_cls_val not in classes_list:
                 st.session_state.sel_cls_val = classes_list[0] if classes_list else None
-            target_cls = st.selectbox("🎯 학급 선택", classes_list, key="sel_cls_val")
             
-            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=target_cls, allow_edit=is_admin, key="grid_class")
-            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_cls, 'CLASS')}</div>", unsafe_allow_html=True)
+            # Selectbox도 선택 즉시 반응하도록 수정
+            target_cls = st.selectbox("🎯 학급 선택", classes_list, index=classes_list.index(st.session_state.sel_cls_val))
+            if target_cls != st.session_state.sel_cls_val:
+                st.session_state.sel_cls_val = target_cls
+                st.rerun()
+            
+            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=st.session_state.sel_cls_val, allow_edit=is_admin, key="grid_class")
+            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, st.session_state.sel_cls_val, 'CLASS')}</div>", unsafe_allow_html=True)
             
         else: 
-            # Selectbox 더블 클릭 완벽 해결
             if "sel_t_val" not in st.session_state or st.session_state.sel_t_val not in teacher_list:
                 st.session_state.sel_t_val = teacher_list[0] if teacher_list else None
-            target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list, key="sel_t_val")
+            
+            # Selectbox도 선택 즉시 반응하도록 수정
+            target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list, index=teacher_list.index(st.session_state.sel_t_val))
+            if target_t != st.session_state.sel_t_val:
+                st.session_state.sel_t_val = target_t
+                st.rerun()
             
             allow_edit = False
             if is_admin:
                 allow_edit = True
                 st.info("💡 **관리자 권한**: 해당 선생님의 수업을 우클릭하여 즉시 교체 및 수정할 수 있습니다.", icon="👑")
             else:
-                if url_teacher and url_teacher == target_t:
+                if url_teacher and url_teacher == st.session_state.sel_t_val:
                     allow_edit = True
                     st.info(f"💡 **스마트 안내**: 본인의 수업을 **우클릭**하여 즉시 맞교환 요청을 보낼 수 있습니다.", icon="🖱️")
                 else:
                     allow_edit = False
-                    st.warning(f"🔒 현재 [{target_t}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크 접속 필요)", icon="🔒")
+                    st.warning(f"🔒 현재 [{st.session_state.sel_t_val}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크 접속 필요)", icon="🔒")
 
-            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=target_t, allow_edit=allow_edit, key="grid_teacher")
-            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_t, 'TEACHER')}</div>", unsafe_allow_html=True)
+            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=st.session_state.sel_t_val, allow_edit=allow_edit, key="grid_teacher")
+            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, st.session_state.sel_t_val, 'TEACHER')}</div>", unsafe_allow_html=True)
 
         if action_result:
             act_id = action_result.get("action_id")
