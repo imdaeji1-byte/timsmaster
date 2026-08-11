@@ -20,26 +20,30 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 2. 🖨️ A4 1페이지 출력 보정 & 🎨 헤더 스티일링 & 🚫 모바일/비밀번호 영어 텍스트 차단
+# 2. 🖨️ A4 1페이지 출력 보정 & 🎨 헤더 스타일링 & 🚨 아이콘 폰트 깨짐 완벽 복구
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    * { font-family: 'Pretendard', -apple-system, sans-serif !important; }
     
-    /* 🚫 비밀번호 입력창 우측 버튼 및 모바일 사이드바 버튼 글자 투명화 (버튼 기능은 유지) */
-    [data-testid="stTextInput"] button,
-    [data-testid="stInputVisibilityButton"],
-    [data-testid="stSidebarCollapseButton"],
-    [data-testid="collapsedControl"] {
-        color: transparent !important;
+    /* 전체 폰트 적용 (단, 아이콘 폰트가 깨지지 않도록 * 선택자 대신 명시적 선택자 사용) */
+    html, body, p, div, h1, h2, h3, h4, h5, h6, a, label, input, button, table, th, td { 
+        font-family: 'Pretendard', -apple-system, sans-serif; 
     }
     
-    [data-testid="stTextInput"] button svg,
-    [data-testid="stInputVisibilityButton"] svg,
-    [data-testid="stSidebarCollapseButton"] svg,
-    [data-testid="collapsedControl"] svg {
-        fill: #475569 !important;
-        color: #475569 !important;
+    /* 🚨 영어 텍스트 찌꺼기 원인 해결 (구글 아이콘 폰트 그래픽으로 강제 복구) */
+    .material-symbols-rounded,
+    .material-icons,
+    span[class*="material"],
+    [data-testid="stIconMaterial"],
+    i {
+        font-family: 'Material Symbols Rounded', 'Material Icons' !important;
+        font-size: 24px !important;
+        color: #64748b !important; /* 아이콘 색상 세련되게 */
+    }
+    
+    /* 비밀번호 입력창 우측 눈모양 버튼만 선택해서 숨김 (라벨 유지) */
+    [data-testid="stTextInput"] button {
+        display: none !important;
     }
     
     /* 🎨 비밀번호 라벨 및 입력칸 모던 스타일링 */
@@ -481,7 +485,6 @@ def save_swap_request(log, auto_approve=True):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     status = 'APPROVED' if auto_approve else 'PENDING'
-    # 🚨 DB 에러 핵심 수정 (log["teacher1"] 변수명 누락 복구)
     c.execute("INSERT INTO swap_logs (cls1, date1, period1, subj1, teacher1, cls2, date2, period2, subj2, teacher2, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (log["cls1"], log["date1"], log["period1"], log["subj1"], log["teacher1"], log["cls2"], log["date2"], log["period2"], log["subj2"], log["teacher2"], status))
     conn.commit()
     conn.close()
@@ -521,7 +524,7 @@ def get_week_dates(offset=0):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_dates["금"].strftime("%Y-%m-%d")
 
-# 5. 사이드바 (🚨 비밀번호 노출 방지 및 깔끔한 문구 적용)
+# 5. 사이드바 
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
 mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 if mode == "관리자 모드 (수업교체/대강)":
@@ -763,7 +766,6 @@ if parsed_df is not None and not parsed_df.empty:
                             st.session_state.sub_logs = load_sub_logs()
                             st.rerun()
 
-                        # 🚨 DB 에러 핵심 수정 (t_cls 변수 누락 복구)
                         elif act == "SUB_DIRECT" and t_item:
                             sub_t, sub_r = action_result.get("sub_t"), action_result.get("sub_r")
                             t_cls = t_item["cls"]
