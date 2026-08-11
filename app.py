@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 기본 설정 및 세션 초기화
 st.set_page_config(page_title="TimeMaster - 모던 시간표 시스템", layout="wide")
 
-# 🚨 이전 코드에서 통째로 누락되었던 필수 초기화 세팅 복구 🚨
 if "copied_data" not in st.session_state: st.session_state.copied_data = None
 if "last_action_id" not in st.session_state: st.session_state.last_action_id = None
 if "school_name" not in st.session_state: st.session_state.school_name = "경남해양고등학교"
@@ -31,29 +30,48 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 2. CSS 스타일링 (상/하단 메뉴 숨김 및 모바일 반응형 디자인 최적화)
+# 2. CSS 스타일링 (🚀 방해 요소 완벽 제거 및 디바이스 맞춤형 반응형 디자인 적용)
 st.markdown("""
 <style>
-    /* 📍 상단 메뉴(Share 등) 및 하단 Manage app 버튼 완벽 숨김 */
-    header[data-testid="stHeader"] { display: none !important; visibility: hidden !important; }
+    /* 📍 3, 4번 요청: 상단 Share 바 및 하단 Manage app 버튼 완벽 숨김 처리 */
+    header[data-testid="stHeader"] { display: none !important; visibility: hidden !important; height: 0px !important; }
     footer { display: none !important; visibility: hidden !important; }
-    .stDeployButton, [data-testid="manage-app-button"] { display: none !important; }
-    #MainMenu { display: none !important; }
+    .stDeployButton, [data-testid="manage-app-button"], #MainMenu { display: none !important; }
     
-    /* 📍 기본 폰트 및 PC 화면 글자 크기 복구 */
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     html, body, p, div, h1, h2, h3, h4, h5, h6, a, label, input, button, table, th, td { font-family: 'Pretendard', -apple-system, sans-serif; }
-    .material-symbols-rounded, .material-icons, span[class*="material"], [data-testid="stIconMaterial"], i { font-family: 'Material Symbols Rounded', 'Material Icons' !important; font-size: 24px !important; color: #64748b !important; }
     [data-testid="stTextInput"] button { display: none !important; }
     [data-testid="stTextInput"] label { font-weight: 800 !important; color: #0f172a !important; font-size: 14px !important; margin-bottom: 6px !important; }
     
     .print-only { display: none !important; }
     
-    /* 📱 모바일 초컴팩트 세련된 디자인 최적화 */
+    /* 📍 1번 요청: PC 화면 글자 크기 시원하고 크게 원상복구 */
+    .main-title { font-size: 34px !important; color: #0f172a; font-weight: 900 !important; letter-spacing: -1px; }
+    .main-subtitle { font-size: 18px !important; color: #0284c7; font-weight: 800 !important; }
+    
+    /* PC 라디오 버튼 디자인 */
+    div[role="radiogroup"] label { padding: 8px 16px !important; background-color: #f1f5f9; border-radius: 10px; margin-right: 5px; transition: all 0.2s; cursor: pointer; }
+    div[role="radiogroup"] label:hover { background-color: #e2e8f0; }
+
+    /* 📱 2, 5번 요청: 모바일 초컴팩트 한 줄 강제 정렬 최적화 */
     @media (max-width: 768px) {
-        .block-container { padding-top: 1rem !important; padding-left: 0.2rem !important; padding-right: 0.2rem !important; }
-        .stButton button { padding: 4px !important; font-size: 13px !important; border-radius: 8px !important; height: auto !important; min-height: 40px !important;}
-        div[data-testid="stHorizontalBlock"] { gap: 0.3rem !important; }
+        .block-container { padding-top: 1rem !important; padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
+        
+        .main-title { font-size: 22px !important; letter-spacing: -0.5px !important; margin-bottom: 2px !important; }
+        .main-subtitle { font-size: 13.5px !important; margin-bottom: 5px !important; }
+        
+        /* 이전/이번/다음 + 인쇄 버튼을 모바일에서 '무조건 1줄'로 강제 묶음 */
+        div[data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: 0.3rem !important; align-items: center !important;}
+        div[data-testid="column"] { width: auto !important; flex: 1 1 0% !important; min-width: 0 !important; }
+        
+        /* 버튼 크기 및 여백 극한 다이어트 */
+        .stButton button { padding: 0px !important; font-size: 12.5px !important; font-weight: 700 !important; border-radius: 8px !important; height: auto !important; min-height: 42px !important; white-space: nowrap !important; width: 100% !important;}
+        
+        /* 라디오 버튼 (조회 방식) 1줄에 딱 맞게 강제 구겨넣기 */
+        div[role="radiogroup"] { flex-wrap: nowrap !important; gap: 3px !important; width: 100% !important; justify-content: space-between !important; }
+        div[role="radiogroup"] label { padding: 8px 2px !important; margin: 0 !important; flex: 1; display: flex; justify-content: center; border-radius: 8px; }
+        div[role="radiogroup"] p { font-size: 11.5px !important; font-weight: 800 !important; white-space: nowrap !important; letter-spacing: -0.8px !important; margin:0; text-align: center; color: #334155; }
+        
         iframe { width: 100% !important; border: none !important; }
     }
 
@@ -79,7 +97,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 우클릭 커스텀 컴포넌트 (모바일 5일 시간표 한 화면 맞춤 적용)
+# 3. ⚡ 우클릭 커스텀 컴포넌트
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -113,7 +131,6 @@ def init_custom_component():
         .pop-input { width: 95%; padding: 7px; margin: 5px 0 10px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; box-sizing: border-box; }
         #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: none; z-index: 100000; transition: opacity 0.3s; }
         
-        /* 📍 모바일 내부 테이블 최적화 (잘림 방지) */
         @media (max-width: 768px) {
             .admin-table th, .admin-table td { padding: 4px 1px; font-size: 11.5px !important; }
             .admin-table td { height: 48px; }
@@ -158,7 +175,6 @@ def init_custom_component():
             const thead_tr = document.getElementById("grid-head-tr"); thead_tr.innerHTML = "";
             const table = document.querySelector('.admin-table');
 
-            // 📍 핵심: 전체 시간표는 가로로 길게, 주간 시간표는 화면 100% 꽉 차게 조절!
             if(viewMode === 'FULL') {
                 table.style.minWidth = '800px'; 
                 thead_tr.innerHTML = '<th style="width: 4%;">요일</th><th style="width: 5%;">교시</th>';
@@ -180,7 +196,7 @@ def init_custom_component():
                     }
                 });
             } else {
-                table.style.minWidth = '100%'; // 모바일 화면에 쏙 들어가도록 100% 처리
+                table.style.minWidth = '100%'; 
                 thead_tr.innerHTML = '<th class="period-col-js">교시</th>';
                 days.forEach(d => {
                     let d_items = Object.values(gridData).filter(i => i.day === d);
@@ -759,22 +775,24 @@ for d in days_kr:
                     full_grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
                 else: full_grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-# 📍 8. 상단 UI (세련되고 슬림한 모바일 완벽 호환 디자인)
+# 📍 8. 상단 UI (방해요소 제거 & 4열 초컴팩트 한 줄 배치)
 st.markdown(f"""
-<div style='text-align: center; margin-bottom: 5px; padding-top: 10px;'>
-    <h2 class='print-hide' style='margin:0; font-size:22px; color:#0f172a; font-weight:800; letter-spacing:-0.5px;'>🏫 {st.session_state.school_name} 시간표</h2>
-    <h4 class='print-hide' style='margin:4px 0 10px 0; color:#0284c7; font-weight:700; font-size:14px;'>[{mon_str} ~ {fri_str}]</h4>
+<div style='text-align: center; margin-bottom: 5px; padding-top: 5px;'>
+    <h2 class='print-hide main-title' style='margin:0;'>🏫 {st.session_state.school_name} 시간표</h2>
+    <h4 class='print-hide main-subtitle' style='margin:4px 0 15px 0;'>[{mon_str} ~ {fri_str}]</h4>
 </div>
 """, unsafe_allow_html=True)
 
-# 네비게이션 버튼을 중앙에 타이트하게 배치
-col_space1, col_btn1, col_btn2, col_btn3, col_space2 = st.columns([1, 1.5, 1.2, 1.5, 1])
+# 네비게이션 버튼과 인쇄 버튼을 완벽한 4칸 한 줄 레이아웃으로 병합
+col_btn1, col_btn2, col_btn3, col_print = st.columns([1, 1, 1, 1])
 with col_btn1:
     if st.button("◀ 이전주", use_container_width=True): st.session_state.week_offset -= 1; st.rerun()
 with col_btn2:
     if st.button("이번주", use_container_width=True): st.session_state.week_offset = 0; st.rerun()
 with col_btn3:
     if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
+with col_print:
+    components.html("""<style>button { width: 100%; padding: 0; background-color: #0f172a; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: sans-serif; font-size: 13px; height: 42px; display: flex; align-items: center; justify-content: center; } button:hover { background-color: #334155; }</style><button onclick="window.parent.print()">🖨️ 인쇄</button>""", height=45)
 
 # URL 파라미터 강제 처리
 url_teacher = st.query_params.get("teacher", None)
@@ -791,18 +809,14 @@ if parsed_df is not None and not parsed_df.empty:
     else: tab1, tab2 = st.tabs(["🗓️ 시간표 조회", "🔄 교체 승인 대기열"])
 
     with tab1:
-        c_v1, c_v2 = st.columns([3, 1])
-        with c_v1:
-            if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
-            # 📍 5. 버튼을 누르면 state 업데이트 후 즉시 rerun시켜서 딜레이 방지
-            view_mode = st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], index=["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"].index(st.session_state.view_mode_val), horizontal=True)
-            if view_mode != st.session_state.view_mode_val:
-                st.session_state.view_mode_val = view_mode
-                st.rerun()
-            
-        with c_v2: 
-            st.write("")
-            components.html("""<style>button { width: 100%; padding: 8px 14px; background-color: #0284c7; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-family: sans-serif; font-size: 13.5px; } button:hover { background-color: #0369a1; }</style><button onclick="window.parent.print()">🖨️ 시간표 인쇄</button>""", height=45)
+        # 📍 5번 요청 해결: 라디오 버튼 두 번 클릭 현상 방지 및 모바일 공간 활용 극대화
+        if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
+        
+        view_mode = st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], index=["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"].index(st.session_state.view_mode_val), horizontal=True, label_visibility="collapsed")
+        
+        if view_mode != st.session_state.view_mode_val:
+            st.session_state.view_mode_val = view_mode
+            st.rerun()
 
         action_result = None
 
@@ -815,7 +829,6 @@ if parsed_df is not None and not parsed_df.empty:
             if "sel_cls_val" not in st.session_state or st.session_state.sel_cls_val not in classes_list:
                 st.session_state.sel_cls_val = classes_list[0] if classes_list else None
             
-            # Selectbox도 선택 즉시 반응하도록 수정
             target_cls = st.selectbox("🎯 학급 선택", classes_list, index=classes_list.index(st.session_state.sel_cls_val))
             if target_cls != st.session_state.sel_cls_val:
                 st.session_state.sel_cls_val = target_cls
@@ -828,7 +841,6 @@ if parsed_df is not None and not parsed_df.empty:
             if "sel_t_val" not in st.session_state or st.session_state.sel_t_val not in teacher_list:
                 st.session_state.sel_t_val = teacher_list[0] if teacher_list else None
             
-            # Selectbox도 선택 즉시 반응하도록 수정
             target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list, index=teacher_list.index(st.session_state.sel_t_val))
             if target_t != st.session_state.sel_t_val:
                 st.session_state.sel_t_val = target_t
