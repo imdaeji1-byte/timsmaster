@@ -20,17 +20,21 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
+# 📍 [NEW] URL 파라미터 자동 인식 (예: ?teacher=김수학 접속 시 해당 선생님 주간 시간표 우선 출력)
+query_params = st.query_params
+if "teacher" in query_params:
+    st.session_state.view_mode_val = "교사별 주간 시간표"
+    st.session_state.sel_t_val = query_params["teacher"]
+
 # 2. 🖨️ A4 1페이지 출력 보정 & 🎨 헤더 스타일링 & 🚨 아이콘 폰트 깨짐 완벽 복구
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
-    /* 전체 폰트 적용 (단, 아이콘 폰트가 깨지지 않도록 * 선택자 대신 명시적 선택자 사용) */
     html, body, p, div, h1, h2, h3, h4, h5, h6, a, label, input, button, table, th, td { 
         font-family: 'Pretendard', -apple-system, sans-serif; 
     }
     
-    /* 🚨 영어 텍스트 찌꺼기 원인 해결 (구글 아이콘 폰트 그래픽으로 강제 복구) */
     .material-symbols-rounded,
     .material-icons,
     span[class*="material"],
@@ -38,15 +42,13 @@ st.markdown("""
     i {
         font-family: 'Material Symbols Rounded', 'Material Icons' !important;
         font-size: 24px !important;
-        color: #64748b !important; /* 아이콘 색상 세련되게 */
+        color: #64748b !important;
     }
     
-    /* 비밀번호 입력창 우측 눈모양 버튼만 선택해서 숨김 (라벨 유지) */
     [data-testid="stTextInput"] button {
         display: none !important;
     }
     
-    /* 🎨 비밀번호 라벨 및 입력칸 모던 스타일링 */
     [data-testid="stTextInput"] label {
         font-weight: 800 !important;
         color: #0f172a !important;
@@ -54,7 +56,6 @@ st.markdown("""
         margin-bottom: 6px !important;
     }
 
-    /* 🖨️ 인쇄 전용 스타일 */
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
         html, body { background-color: white !important; zoom: 92%; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
@@ -78,7 +79,6 @@ st.markdown("""
         .badge-swap { background-color: #eab308 !important; color: white !important; -webkit-print-color-adjust: exact; }
     }
     
-    /* 🎨 웹 화면 전용 모던 CSS & 시간표 맨 윗줄 헤더 눈 편한 색상 */
     .table-container { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 18px; border: 2px solid #e2e8f0; box-shadow: 0 8px 20px rgba(0,0,0,0.04); background: white; padding: 6px; }
     .unified-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; table-layout: fixed; }
     
@@ -103,7 +103,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 우클릭 팝업 일체형 UI 컴포넌트 (모바일 화면 밖 밀림 방지 패치)
+# 3. ⚡ 우클릭 팝업 일체형 UI 컴포넌트
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -213,23 +213,19 @@ def init_custom_component():
             hideAllPopups();
         }
 
-        // 📍 모바일 화면 밖 밀림 방지 스마트 위치 계산 로직
         function positionPopup(popId) {
             const pop = document.getElementById(popId);
             const rect = selectedTdElement.getBoundingClientRect();
             
-            pop.style.display = "block"; // 화면에 렌더링해야 실제 넓이 측정 가능
+            pop.style.display = "block";
             const popWidth = pop.offsetWidth || 310; 
             
             let popLeft = rect.left + window.pageXOffset;
             let popTop = rect.bottom + window.pageYOffset + 5;
             
-            // 화면 오른쪽 밖으로 넘어갈 경우 넓이만큼 왼쪽으로 당기기
             if(popLeft + popWidth > window.innerWidth + window.pageXOffset) {
                 popLeft = window.innerWidth + window.pageXOffset - popWidth - 15;
             }
-            
-            // 그래도 왼쪽으로 밀려나가면 10px로 최소 여백 보장
             if(popLeft < 10) popLeft = 10;
             
             pop.style.left = `${popLeft}px`; 
@@ -524,7 +520,7 @@ def get_week_dates(offset=0):
 current_week_dates = get_week_dates(st.session_state.week_offset)
 mon_str, fri_str = current_week_dates["월"].strftime("%Y-%m-%d"), current_week_dates["금"].strftime("%Y-%m-%d")
 
-# 5. 사이드바 
+# 5. 사이드바
 st.sidebar.title(f"🏫 {st.session_state.school_name}")
 mode = st.sidebar.radio("접속 모드", ["학생/교사 시간표 보기", "관리자 모드 (수업교체/대강)"])
 if mode == "관리자 모드 (수업교체/대강)":
