@@ -30,7 +30,7 @@ if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "�
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 2. CSS 스타일링
+# 2. CSS 스타일링 (인쇄 전용 HTML 표시 기능 복구 포함)
 st.markdown("""
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -38,18 +38,35 @@ st.markdown("""
     .material-symbols-rounded, .material-icons, span[class*="material"], [data-testid="stIconMaterial"], i { font-family: 'Material Symbols Rounded', 'Material Icons' !important; font-size: 24px !important; color: #64748b !important; }
     [data-testid="stTextInput"] button { display: none !important; }
     [data-testid="stTextInput"] label { font-weight: 800 !important; color: #0f172a !important; font-size: 14px !important; margin-bottom: 6px !important; }
+    
+    /* 📍 일반 화면에서는 인쇄용 뷰를 완전히 숨김 */
+    .print-only { display: none !important; }
+
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
         html, body { background-color: white !important; zoom: 92%; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
         header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], div[role="tablist"], [data-testid="stRadio"], [data-testid="stSelectbox"], [data-testid="stAlert"], [data-testid="stToastContainer"], iframe, .stButton, .print-hide, h1.print-hide { display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; }
         .main, .main .block-container, [data-testid="stVerticalBlock"] { padding: 0 !important; margin: 0 !important; max-width: 100% !important; width: 100% !important; gap: 0 !important; }
-        .print-title { display: block !important; margin-top: 0 !important; margin-bottom: 10px !important; padding: 0 !important; }
-        .print-title h3 { font-size: 20px !important; margin: 0 !important; color: #000 !important; }
+        
+        /* 📍 인쇄 시에만 인쇄 전용 뷰를 표시하고 스타일 적용 */
+        .print-only { display: block !important; width: 100%; }
+        .print-title { display: block !important; margin-top: 0 !important; margin-bottom: 10px !important; padding: 0 !important; text-align: center; }
+        .print-title h3 { font-size: 20px !important; margin: 0 !important; color: #000 !important; font-weight: 800; }
+        
+        .table-container { box-shadow: none !important; border: 2px solid #000 !important; margin: 0 !important; padding: 2px !important; page-break-inside: avoid !important; }
+        .unified-table { width: 100% !important; border-collapse: collapse !important; text-align: center; font-size: 13px; }
+        .unified-table th, .unified-table td { border: 1px solid #000 !important; padding: 4px; }
+        .unified-table th { background-color: #e2e8f0 !important; color: #000 !important; font-weight: bold; -webkit-print-color-adjust: exact; }
+        .day-col { background-color: #f1f5f9 !important; font-weight: bold; -webkit-print-color-adjust: exact; }
+        .period-col { background-color: #f8fafc !important; font-weight: bold; -webkit-print-color-adjust: exact; }
+        .bg-substitute { background-color: #ffedd5 !important; -webkit-print-color-adjust: exact; }
+        .bg-swapped { background-color: #fef9c3 !important; -webkit-print-color-adjust: exact; }
+        .status-badge { font-size: 10px; font-weight: bold; color: #000 !important; border: 1px solid #000; padding: 1px 4px; border-radius: 4px; margin-bottom: 2px; display: inline-block; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. ⚡ 컴포넌트: 본인 수업 목록에서 아예 제거 로직 추가
+# 3. ⚡ 컴포넌트: 모바일/PC 하단 잘림 방지 '스마트 업-팝업' 로직 탑재
 def init_custom_component():
     comp_dir = "admin_grid_component"
     os.makedirs(comp_dir, exist_ok=True)
@@ -220,18 +237,35 @@ def init_custom_component():
             hideAllPopups();
         }
 
+        // 📍 [핵심 수정] 팝업 화면 밖(아래쪽) 잘림 방지 위치 조정 로직
         function positionPopup(popId) {
             const pop = document.getElementById(popId);
             const rect = selectedTdElement.getBoundingClientRect();
-            pop.style.display = "block";
+            pop.style.display = "block"; // 렌더링 해야 높이/너비 계산 가능
+            
             const popWidth = pop.offsetWidth || 310; 
+            const popHeight = pop.offsetHeight || 250; 
+            
             let popLeft = rect.left + window.pageXOffset;
             let popTop = rect.bottom + window.pageYOffset + 5;
-            if(popLeft + popWidth > window.innerWidth + window.pageXOffset) { popLeft = window.innerWidth + window.pageXOffset - popWidth - 15; }
+            
+            // X축 (오른쪽 잘림 방지)
+            if(popLeft + popWidth > window.innerWidth + window.pageXOffset) { 
+                popLeft = window.innerWidth + window.pageXOffset - popWidth - 15; 
+            }
             if(popLeft < 10) popLeft = 10;
-            pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; 
+            
+            // Y축 (아래쪽 잘림 방지: 공간 부족 시 셀 위로 솟아오르게 처리)
+            if(popTop + popHeight > window.innerHeight + window.pageYOffset) {
+                popTop = rect.top + window.pageYOffset - popHeight - 5;
+            }
+            if(popTop < 10) popTop = 10;
+            
+            pop.style.left = `${popLeft}px`; 
+            pop.style.top = `${popTop}px`; 
         }
 
+        // 📍 컨텍스트 메뉴(우클릭 메뉴) 아래쪽 잘림 방지
         function showContextMenu(x, y) {
             const menu = document.getElementById("contextMenu");
             
@@ -251,10 +285,24 @@ def init_custom_component():
 
             menu.style.display = "block";
             const menuWidth = menu.offsetWidth || 200;
+            const menuHeight = menu.offsetHeight || 250;
+            
             let popLeft = x;
-            if(x + menuWidth > window.innerWidth + window.pageXOffset) { popLeft = window.innerWidth + window.pageXOffset - menuWidth - 10; }
+            let popTop = y;
+            
+            if(x + menuWidth > window.innerWidth + window.pageXOffset) { 
+                popLeft = window.innerWidth + window.pageXOffset - menuWidth - 10; 
+            }
             if(popLeft < 10) popLeft = 10;
-            menu.style.left = `${popLeft}px`; menu.style.top = `${y}px`; 
+            
+            // Y축 잘림 방지
+            if(y + menuHeight > window.innerHeight + window.pageYOffset) {
+                popTop = y - menuHeight - 5; // 마우스 위쪽으로 메뉴 올리기
+            }
+            if(popTop < 10) popTop = 10;
+            
+            menu.style.left = `${popLeft}px`; 
+            menu.style.top = `${popTop}px`; 
         }
 
         function hideAllPopups() {
@@ -300,13 +348,12 @@ def init_custom_component():
             const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
             const targetDayKr = dayNames[targetDayNum];
             
-            // 📍 [핵심 수정] 기준 수업 교사(자신)와 동일한 교사의 수업은 후보에서 원천 차단!
             const basicCandidates = Object.values(gridData).filter(item => 
                 String(item.cls) === String(t.cls) && 
                 String(item.day) === String(targetDayKr) && 
                 item.subj !== "" && item.subj !== "-" &&
                 !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period)) &&
-                String(item.teacher) !== String(t.teacher) // 내 수업(다른 교시 포함) 아예 목록에서 제거
+                String(item.teacher) !== String(t.teacher)
             );
             
             const validCandidates = basicCandidates.filter(t2 => {
@@ -316,14 +363,12 @@ def init_custom_component():
                     String(cell.cls) !== String(t.cls) && 
                     cell.teacher === t.teacher
                 );
-                
                 const conflict2 = Object.values(gridData).some(cell => 
                     String(cell.day) === String(t.day) && 
                     Number(cell.period) === Number(t.period) && 
                     String(cell.cls) !== String(t2.cls) && 
                     cell.teacher === t2.teacher
                 );
-                
                 return !conflict1 && !conflict2;
             });
             
@@ -541,7 +586,7 @@ if mode == "관리자 모드 (수업교체/대강)":
         if pin == "3060": st.session_state.admin_authenticated = True; st.sidebar.success("관리자 로그인 완료!"); st.rerun()
         elif pin != "": st.sidebar.error("비밀번호가 일치하지 않습니다."); mode = "학생/교사 시간표 보기"
 
-# 6. 기초 엑셀 파싱
+# 6. 기초 엑셀 파싱 및 최신 반영
 DEFAULT_EXCEL = "2026년 2학기 시간표.xlsx"
 if st.session_state.raw_df is None and os.path.exists(DEFAULT_EXCEL): st.session_state.raw_df = pd.read_excel(DEFAULT_EXCEL)
 
@@ -631,7 +676,74 @@ def get_latest_updated_timetable(base_df, target_week_dates_dict):
 
 parsed_df = get_latest_updated_timetable(p_df, current_week_dates)
 
-# 7. 공통 풀 그리드 데이터 생성
+# 📍 7. 인쇄 전용 백그라운드 뷰를 위한 HTML 생성 함수 (화면엔 안 보이고 종이에만 출력)
+def build_print_full_grid_html(df_in):
+    days = ["월", "화", "수", "목", "금"]; classes = sorted(df_in["학급"].unique())
+    sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
+    html = f"<div class='print-title'><h3>🏫 {st.session_state.school_name} 전체 시간표 ({mon_str} ~ {fri_str})</h3></div>"
+    html += "<div class='table-container'><table class='unified-table'><thead><tr><th style='width: 4%;'>요일</th><th style='width: 5%;'>교시</th>"
+    for c in classes: html += f"<th>{c}</th>"
+    html += "</tr></thead><tbody>"
+    for d in days:
+        date_str = current_week_dates[d].strftime("%Y-%m-%d")
+        for p in range(1, 8):
+            html += f"<tr>"
+            if p == 1: html += f"<td rowspan='7' class='day-col'>{d}</td>"
+            html += f"<td class='period-col'>{p}</td>"
+            for c in classes:
+                cell_data = df_in[(df_in["학급"] == c) & (df_in["요일"] == d) & (df_in["교시"] == p)]
+                if not cell_data.empty:
+                    row = cell_data.iloc[0]
+                    subj, teacher, is_swapped = row["과목"], row["교사"], row.get("is_swapped", False)
+                    sub_key = (date_str, c, p)
+                    if sub_key in sub_dict:
+                        if sub_dict[sub_key]['대강교사'] == "빈칸": bg_class, txt = "", "-"
+                        else: bg_class, txt = "bg-substitute", f"<span class='status-badge'>대강</span><br><b>{subj}</b><br>({sub_dict[sub_key]['대강교사']})"
+                    elif is_swapped: bg_class, txt = "bg-swapped", f"<span class='status-badge'>교체됨</span><br><b>{subj}</b><br>({teacher})"
+                    else: bg_class, txt = "", f"<b>{subj}</b><br>({teacher})" if subj else "-"
+                    html += f"<td class='{bg_class}'>{txt}</td>"
+                else: html += "<td>-</td>"
+            html += "</tr>"
+    return html + "</tbody></table></div>"
+
+def build_print_weekly_html(all_parsed_df, title_name, filter_type="CLASS"):
+    days = ["월", "화", "수", "목", "금"]; periods = list(range(1, 8))
+    html = f"<div class='print-title'><h3>🏫 {title_name} 주간 시간표 ({mon_str} ~ {fri_str})</h3></div>"
+    html += "<div class='table-container'><table class='unified-table'><thead><tr><th style='width:8%;'>교시</th>"
+    for d in days: html += f"<th>{d} ({current_week_dates[d].strftime('%m/%d')})</th>"
+    html += "</tr></thead><tbody>"
+    sub_dict = { (log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs }
+    for p in periods:
+        html += f"<tr><td class='period-col'>{p}교시</td>"
+        for d in days:
+            date_str = current_week_dates[d].strftime("%Y-%m-%d"); cell_data = pd.DataFrame(); is_sub_entry, sub_info = False, None
+            if filter_type == "CLASS": cell_data = all_parsed_df[(all_parsed_df["학급"] == title_name) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
+            else:
+                cell_data = all_parsed_df[(all_parsed_df["교사"] == title_name) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
+                for sub_key, sub_val in sub_dict.items():
+                    if sub_key[0] == date_str and int(sub_key[2]) == p and sub_val["대강교사"] == title_name:
+                        cls_cell = all_parsed_df[(all_parsed_df["학급"] == sub_key[1]) & (all_parsed_df["요일"] == d) & (all_parsed_df["교시"] == p)]
+                        if not cls_cell.empty: cell_data, is_sub_entry, sub_info = cls_cell, True, sub_val; break
+
+            if not cell_data.empty:
+                row = cell_data.iloc[0]
+                subj, teacher, cls, is_swapped = row["과목"], row["교사"], row["학급"], row.get("is_swapped", False)
+                sub_key = (date_str, cls, p); cell_class, badge_html = "", ""
+                if is_sub_entry or sub_key in sub_dict:
+                    if not sub_info: sub_info = sub_dict[sub_key]
+                    if sub_info["대강교사"] == "빈칸": subj, teacher = "-", ""
+                    else:
+                        cell_class = "bg-substitute"
+                        if filter_type == "TEACHER" and sub_info["대강교사"] == title_name: badge_html, teacher = f"<span class='status-badge'>대강수업 [{cls}]</span><br>", f"<b>{title_name} (대강)</b>"
+                        else: badge_html, teacher = f"<span class='status-badge'>대강 ({sub_info['대강교사']})</span><br>", f"<s>{teacher}</s> ➔ <b>{sub_info['대강교사']}</b>"
+                elif is_swapped: cell_class, badge_html = "bg-swapped", "<span class='status-badge'>교체됨</span><br>"
+                display_teacher = f"({teacher})" if filter_type == "CLASS" and teacher else f"[{cls}]"
+                html += "<td>-</td>" if subj in ["", "-"] else f"<td class='{cell_class}'>{badge_html}<b>{subj}</b><br>{display_teacher}</td>"
+            else: html += "<td>-</td>"
+        html += "</tr>"
+    return html + "</tbody></table></div>"
+
+# 공통 풀 그리드 데이터 생성
 days_kr = ["월", "화", "수", "목", "금"]
 classes_list = sorted(parsed_df["학급"].unique()) if parsed_df is not None and not parsed_df.empty else []
 sub_dict = {(log["날짜"], log["학급"], int(log["교시"])): log for log in st.session_state.sub_logs}
@@ -692,12 +804,18 @@ if parsed_df is not None and not parsed_df.empty:
             if is_admin:
                 st.info("💡 **스마트 사용법**: **우클릭**(자동 필터링 교체/대강 팝업창), **Ctrl+C/V**(다주차 간 복사/붙여넣기), **Delete**(즉시 빈칸 삭제)", icon="🖱️")
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="FULL", target_name="", allow_edit=is_admin, key="grid_full")
+            
+            # 📍 인쇄 전용 백그라운드 뷰 렌더링 (화면엔 안보임)
+            st.markdown(f"<div class='print-only'>{build_print_full_grid_html(parsed_df)}</div>", unsafe_allow_html=True)
 
         elif view_mode == "학급별 주간 시간표": 
             idx = classes_list.index(st.session_state.sel_cls_val) if st.session_state.sel_cls_val in classes_list else 0
             target_cls = st.selectbox("🎯 학급 선택", classes_list, index=idx)
             st.session_state.sel_cls_val = target_cls
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=target_cls, allow_edit=is_admin, key="grid_class")
+            
+            # 📍 인쇄 전용 백그라운드 뷰 렌더링
+            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_cls, 'CLASS')}</div>", unsafe_allow_html=True)
             
         else: 
             idx = teacher_list.index(st.session_state.sel_t_val) if st.session_state.sel_t_val in teacher_list else 0
@@ -717,6 +835,9 @@ if parsed_df is not None and not parsed_df.empty:
                     st.warning(f"🔒 현재 [{target_t}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크로 접속해야 교체 요청 가능)", icon="🔒")
 
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=target_t, allow_edit=allow_edit, key="grid_teacher")
+            
+            # 📍 인쇄 전용 백그라운드 뷰 렌더링
+            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_t, 'TEACHER')}</div>", unsafe_allow_html=True)
 
         if action_result:
             act_id = action_result.get("action_id")
