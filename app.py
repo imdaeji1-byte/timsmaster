@@ -8,6 +8,9 @@ from datetime import datetime, timedelta, date
 # 1. 페이지 기본 설정 및 세션 초기화
 st.set_page_config(page_title="TimeMaster - 모던 시간표 시스템", layout="wide")
 
+# 🚨 1단계 핵심 수정: 버튼을 눌러도 튕기지 않도록 URL 변수를 무조건 최상단에 고정
+url_teacher = st.query_params.get("teacher", None)
+
 if "copied_data" not in st.session_state: st.session_state.copied_data = None
 if "last_action_id" not in st.session_state: st.session_state.last_action_id = None
 if "school_name" not in st.session_state: st.session_state.school_name = "경남해양고등학교"
@@ -16,26 +19,21 @@ if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 if "raw_df" not in st.session_state: st.session_state.raw_df = None
 if "admin_authenticated" not in st.session_state: st.session_state.admin_authenticated = False
 
-# URL 파라미터 자동 인식 및 상태 동기화
-try:
-    url_params = st.query_params
-    if "teacher" in url_params:
-        target_teacher_name = url_params["teacher"]
-        if "url_teacher_applied" not in st.session_state:
-            st.session_state["view_mode_val"] = "교사별 주간 시간표"
-            st.session_state["sel_t_val"] = target_teacher_name
-            st.session_state["url_teacher_applied"] = True
-except Exception as e:
-    pass
-
 if "view_mode_val" not in st.session_state: st.session_state.view_mode_val = "전체 시간표"
 if "sel_cls_val" not in st.session_state: st.session_state.sel_cls_val = None
 if "sel_t_val" not in st.session_state: st.session_state.sel_t_val = None
 
-# 2. CSS 스타일링 (🚀 1, 2번 방해요소 제거 & 반응형 디자인 초컴팩트 최적화)
+# URL 파라미터가 있을 경우 초기 화면을 해당 교사 시간표로 강제 세팅
+if url_teacher:
+    if "url_teacher_applied" not in st.session_state:
+        st.session_state.view_mode_val = "교사별 주간 시간표"
+        st.session_state.sel_t_val = url_teacher
+        st.session_state.url_teacher_applied = True
+
+# 2. CSS 스타일링 (Share, Manage app 버튼 숨김 적용 완료)
 st.markdown("""
 <style>
-    /* 상단 메뉴 및 하단 버튼 완벽 숨김 */
+    /* 상단 Share, 별표 메뉴 및 하단 Manage app 버튼 완벽 숨김 */
     header[data-testid="stHeader"] { display: none !important; visibility: hidden !important; height: 0px !important; }
     footer { display: none !important; visibility: hidden !important; }
     .stDeployButton, [data-testid="manage-app-button"], #MainMenu { display: none !important; }
@@ -47,42 +45,6 @@ st.markdown("""
     
     .print-only { display: none !important; }
     
-    /* 📍 인쇄 버튼과 타이틀 CSS (PC 기본 시원하게) */
-    .main-title { font-size: 32px !important; color: #0f172a; font-weight: 900 !important; letter-spacing: -1px; }
-    .main-subtitle { font-size: 18px !important; color: #0284c7; font-weight: 800 !important; }
-    .print-btn-top { position: absolute; right: 0px; top: 10px; padding: 6px 14px; background-color: #f8fafc; color: #475569; border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .print-btn-top:hover { background-color: #e2e8f0; color: #0f172a; }
-
-    /* 라디오 버튼 PC 디자인 */
-    div[role="radiogroup"] label { padding: 8px 16px !important; background-color: #f1f5f9; border-radius: 10px; margin-right: 5px; cursor: pointer; }
-
-    /* 📱 모바일 초컴팩트 세련된 디자인 최적화 */
-    @media (max-width: 768px) {
-        .block-container { padding-top: 1rem !important; padding-left: 0.2rem !important; padding-right: 0.2rem !important; }
-        
-        .main-title { font-size: 22px !important; letter-spacing: -0.5px !important; margin-bottom: 2px !important; }
-        .main-subtitle { font-size: 13.5px !important; margin-bottom: 5px !important; }
-        .print-btn-top { top: 0px; padding: 4px 8px; font-size: 11.5px; border-radius: 6px; }
-        
-        /* 📍 네비게이션 버튼 1줄 유지 & 좌우 여백으로 컴팩트하게 모으기 */
-        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) { flex-wrap: nowrap !important; align-items: center !important; gap: 0.2rem !important; }
-        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div[data-testid="column"] { min-width: 0 !important; }
-        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(1),
-        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(5) { flex: 0.3 1 0px !important; } /* 좌우 스페이서가 빈 공간을 차지해 중앙을 압축시킴 */
-        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(2),
-        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(3),
-        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(5)) > div:nth-child(4) { flex: 1 1 0px !important; }
-        
-        .stButton button { padding: 4px 0px !important; font-size: 12px !important; font-weight: 800 !important; border-radius: 8px !important; height: auto !important; min-height: 38px !important; white-space: nowrap !important; width: 100% !important; }
-        
-        /* 📍 라디오 버튼 1줄에 완벽하게 꽉 차게 구겨넣기 */
-        div[role="radiogroup"] { flex-wrap: nowrap !important; gap: 3px !important; width: 100% !important; display: flex !important; margin-bottom: 5px !important; }
-        div[role="radiogroup"] label { padding: 6px 0px !important; margin: 0 !important; flex: 1 1 0px !important; display: flex !important; justify-content: center !important; background-color: #f1f5f9; border-radius: 8px; }
-        div[role="radiogroup"] p { font-size: 11px !important; font-weight: 800 !important; letter-spacing: -1.2px !important; white-space: nowrap !important; text-align: center !important; color: #334155; margin:0; }
-        
-        iframe { width: 100% !important; border: none !important; }
-    }
-
     /* 🖨️ 인쇄 전용 CSS */
     @media print {
         @page { size: A4 landscape; margin: 8mm; }
@@ -783,24 +745,17 @@ for d in days_kr:
                     full_grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": subj_val, "teacher": teacher_val, "sub_teacher": sub_teacher_val, "is_swapped": bool(row.get("is_swapped", False)), "is_sub": is_sub}
                 else: full_grid_data[key] = {"date": date_str, "day": d, "cls": c, "period": p, "subj": "", "teacher": "", "sub_teacher": "", "is_swapped": False, "is_sub": False}
 
-# 📍 8. 상단 UI (1, 2번 요청 완벽 반영: 인쇄 버튼 우측 상단 & 네비게이션 중앙 1줄 묶음)
-st.markdown(f"""
-<div style='position: relative; text-align: center; margin-bottom: 5px; padding-top: 5px;'>
-    <h2 class='print-hide main-title' style='margin:0;'>🏫 {st.session_state.school_name} 시간표</h2>
-    <h4 class='print-hide main-subtitle' style='margin:4px 0 10px 0;'>[{mon_str} ~ {fri_str}]</h4>
-    <button class="print-hide print-btn-top" onclick="window.parent.print()">🖨️ 시간표 인쇄</button>
-</div>
-""", unsafe_allow_html=True)
+# 8. 상단 UI (안정적인 레이아웃)
+st.markdown(f"<h1 class='print-hide' style='text-align: center;'>🏫 {st.session_state.school_name} 시간표</h1>", unsafe_allow_html=True)
+st.markdown(f"<h4 class='print-hide' style='text-align: center; color: #0284c7;'>[{mon_str} ~ {fri_str}]</h4>", unsafe_allow_html=True)
 
-# 📍 네비게이션 버튼을 완벽하게 1줄로 유지하고, 양옆 스페이서를 둬서 크기를 아담하게 모아줌
-col_sp1, col_btn1, col_btn2, col_btn3, col_sp2 = st.columns([1, 1.2, 1, 1.2, 1])
+col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
 with col_btn1:
     if st.button("◀ 이전주", use_container_width=True): st.session_state.week_offset -= 1; st.rerun()
 with col_btn2:
     if st.button("이번주", use_container_width=True): st.session_state.week_offset = 0; st.rerun()
 with col_btn3:
     if st.button("다음주 ▶", use_container_width=True): st.session_state.week_offset += 1; st.rerun()
-
 
 # 9. 메인 화면 렌더링
 if parsed_df is not None and not parsed_df.empty:
@@ -809,45 +764,49 @@ if parsed_df is not None and not parsed_df.empty:
     else: tab1, tab2 = st.tabs(["🗓️ 시간표 조회", "🔄 교체 승인 대기열"])
 
     with tab1:
-        # 📍 4, 5번 요청 완벽 해결: 더블 클릭 방지 및 1줄 꽉 찬 디자인 적용 완료
-        st.radio("조회 방식", ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"], key="view_mode_val", horizontal=True, label_visibility="collapsed")
+        c_v1, c_v2 = st.columns([3, 1])
+        with c_v1:
+            view_opts = ["전체 시간표", "학급별 주간 시간표", "교사별 주간 시간표"]
+            view_idx = view_opts.index(st.session_state.view_mode_val) if st.session_state.view_mode_val in view_opts else 0
+            view_mode = st.radio("조회 방식", view_opts, index=view_idx, horizontal=True)
+            st.session_state.view_mode_val = view_mode
+        with c_v2: 
+            st.write("")
+            components.html("""<style>button { width: 100%; padding: 8px 14px; background-color: #0284c7; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-family: sans-serif; font-size: 13.5px; } button:hover { background-color: #0369a1; }</style><button onclick="window.parent.print()">🖨️ 시간표 인쇄</button>""", height=45)
 
         action_result = None
 
-        if st.session_state.view_mode_val == "전체 시간표":
+        if view_mode == "전체 시간표":
             if is_admin: st.info("💡 **스마트 사용법**: **우클릭**(자동 교체/대강), **Ctrl+C/V**(복사/붙여넣기)", icon="🖱️")
             action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="FULL", target_name="", allow_edit=is_admin, key="grid_full")
             st.markdown(f"<div class='print-only'>{build_print_full_grid_html(parsed_df)}</div>", unsafe_allow_html=True)
 
-        elif st.session_state.view_mode_val == "학급별 주간 시간표": 
-            if "sel_cls_val" not in st.session_state or st.session_state.sel_cls_val not in classes_list:
-                st.session_state.sel_cls_val = classes_list[0] if classes_list else None
-            
-            st.selectbox("🎯 학급 선택", classes_list, key="sel_cls_val") # 더블클릭 필요 없음!
-            
-            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=st.session_state.sel_cls_val, allow_edit=is_admin, key="grid_class")
-            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, st.session_state.sel_cls_val, 'CLASS')}</div>", unsafe_allow_html=True)
+        elif view_mode == "학급별 주간 시간표": 
+            idx = classes_list.index(st.session_state.sel_cls_val) if st.session_state.sel_cls_val in classes_list else 0
+            target_cls = st.selectbox("🎯 학급 선택", classes_list, index=idx)
+            st.session_state.sel_cls_val = target_cls
+            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="CLASS", target_name=target_cls, allow_edit=is_admin, key="grid_class")
+            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_cls, 'CLASS')}</div>", unsafe_allow_html=True)
             
         else: 
-            if "sel_t_val" not in st.session_state or st.session_state.sel_t_val not in teacher_list:
-                st.session_state.sel_t_val = teacher_list[0] if teacher_list else None
-            
-            st.selectbox("👨‍🏫 교사 선택", teacher_list, key="sel_t_val") # 더블클릭 필요 없음!
+            idx = teacher_list.index(st.session_state.sel_t_val) if st.session_state.sel_t_val in teacher_list else 0
+            target_t = st.selectbox("👨‍🏫 교사 선택", teacher_list, index=idx)
+            st.session_state.sel_t_val = target_t
             
             allow_edit = False
             if is_admin:
                 allow_edit = True
                 st.info("💡 **관리자 권한**: 해당 선생님의 수업을 우클릭하여 즉시 교체 및 수정할 수 있습니다.", icon="👑")
             else:
-                if url_teacher and url_teacher == st.session_state.sel_t_val:
+                if url_teacher and url_teacher == target_t:
                     allow_edit = True
                     st.info(f"💡 **스마트 안내**: 본인의 수업을 **우클릭**하여 즉시 맞교환 요청을 보낼 수 있습니다.", icon="🖱️")
                 else:
                     allow_edit = False
-                    st.warning(f"🔒 현재 [{st.session_state.sel_t_val}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크 접속 필요)", icon="🔒")
+                    st.warning(f"🔒 현재 [{target_t}] 선생님의 시간표는 조회만 가능합니다. (본인 전용 링크 접속 필요)", icon="🔒")
 
-            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=st.session_state.sel_t_val, allow_edit=allow_edit, key="grid_teacher")
-            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, st.session_state.sel_t_val, 'TEACHER')}</div>", unsafe_allow_html=True)
+            action_result = AdminGrid(grid_data=full_grid_data, classes=classes_list, teacher_list=teacher_list, copied_data=st.session_state.copied_data, is_admin=is_admin, view_mode="TEACHER", target_name=target_t, allow_edit=allow_edit, key="grid_teacher")
+            st.markdown(f"<div class='print-only'>{build_print_weekly_html(parsed_df, target_t, 'TEACHER')}</div>", unsafe_allow_html=True)
 
         if action_result:
             act_id = action_result.get("action_id")
