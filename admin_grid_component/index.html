@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; background-color: white; overflow-x: auto; overflow-y: hidden; }
+        .admin-table { width: 100%; border-collapse: separate; border-spacing: 4px; text-align: center; font-size: 13px; background-color: #ffffff; table-layout: fixed; user-select: none; }
+        .admin-table th { background-color: #f1f5f9 !important; color: #334155 !important; padding: 11px 4px; font-weight: 800; border-radius: 10px; font-size: 13.5px; border-bottom: 2px solid #cbd5e1; }
+        .admin-table td { background-color: #f8fafc; padding: 6px 2px; border-radius: 10px; height: 58px; vertical-align: middle; cursor: pointer; position: relative; }
+        .admin-table td:hover { filter: brightness(0.95); outline: 2px solid #0284c7; }
+        .admin-table td.selected { outline: 3px solid #ef4444 !important; background-color: #fef2f2 !important; }
+        .day-col-js { background-color: #e0f2fe !important; color: #0284c7 !important; font-weight: 800; border-radius: 10px; }
+        .period-col-js { background-color: #f1f5f9 !important; font-weight: 800; color: #475569; border-radius: 10px; }
+        .bg-sub { background-color: #ffedd5 !important; }
+        .bg-swap { background-color: #fef9c3 !important; }
+        .context-menu { display: none; position: absolute; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); width: 200px; z-index: 10000; padding: 6px 0; text-align: left; }
+        .context-menu-item { padding: 10px 16px; font-size: 13px; font-weight: 700; color: #1e293b; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+        .context-menu-item:hover { background-color: #f1f5f9; color: #0284c7; }
+        .context-menu-divider { height: 1px; background-color: #e2e8f0; margin: 4px 0; }
+        .popover { display: none; position: absolute; background: white; border: 2.5px solid #0284c7; border-radius: 16px; padding: 14px; width: 280px; box-shadow: 0 12px 30px rgba(0,0,0,0.18); z-index: 10001; text-align: left; }
+        .pop-btn { display: block; width: 100%; margin: 6px 0; padding: 9px; border: none; border-radius: 10px; font-weight: bold; font-size: 12.5px; cursor: pointer; text-align: center; }
+        .btn-primary { background: #0284c7; color: white; }
+        .btn-swap { background: #eab308; color: white; }
+        .btn-close { background: #94a3b8; color: white; margin-top: 6px; }
+        .pop-input { width: 95%; padding: 7px; margin: 5px 0 10px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 600; box-sizing: border-box; }
+        #jsToast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); display: none; z-index: 100000; transition: opacity 0.3s; }
+        
+        @media (max-width: 768px) {
+            .admin-table th, .admin-table td { padding: 4px 1px; font-size: 11.5px !important; }
+            .admin-table td { height: 48px; }
+            .period-col-js { width: 12%; font-size: 11px !important; }
+        }
+    </style>
+    <script>
+        function sendMessageToStreamlit(data) { window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: "streamlit:setComponentValue"}, {value: data}), "*"); }
+        const Streamlit = {
+            setComponentReady: function() { window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1}, "*"); },
+            setFrameHeight: function(h) { window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h}, "*"); }
+        };
+
+        let gridData = {}; let classes = []; let teacherList = []; let copiedData = null; 
+        let isAdmin = false; let viewMode = 'FULL'; let targetName = ''; let allowEdit = false;
+        let selectedKey = null; let selectedTdElement = null; const days = ["월", "화", "수", "목", "금"];
+
+        window.addEventListener("message", function(event) {
+            if (event.source !== window.parent) return;
+            if (event.data.type === "streamlit:render") {
+                gridData = event.data.args.grid_data;
+                classes = event.data.args.classes;
+                teacherList = event.data.args.teacher_list || [];
+                copiedData = event.data.args.copied_data || null;
+                isAdmin = event.data.args.is_admin || false;
+                viewMode = event.data.args.view_mode || 'FULL';
+                targetName = event.data.args.target_name || '';
+                allowEdit = event.data.args.allow_edit || false;
+                renderGrid();
+                setTimeout(() => Streamlit.setFrameHeight(document.body.scrollHeight + 80), 50);
+            }
+        });
+
+        function showToast(msg) {
+            const toast = document.getElementById("jsToast");
+            toast.innerText = msg; toast.style.display = "block"; toast.style.opacity = "1";
+            setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.style.display="none", 300); }, 2000);
+        }
+        
+        // 🚨 누락 복구: 셀의 "실질적인 교사(대강 교사 우선)"를 반환하는 함수
+        function getEffectiveTeacher(item) {
+            if (!item) return "";
+            return (item.is_sub && item.sub_teacher && item.sub_teacher !== "빈칸") ? item.sub_teacher : item.teacher;
+        }
+
+        function renderGrid() {
+            const tbody = document.getElementById("grid-body"); tbody.innerHTML = "";
+            const thead_tr = document.getElementById("grid-head-tr"); thead_tr.innerHTML = "";
+            const table = document.querySelector('.admin-table');
+
+            if(viewMode === 'FULL') {
+                table.style.minWidth = '800px'; 
+                thead_tr.innerHTML = '<th style="width: 4%;">요일</th><th style="width: 5%;">교시</th>';
+                classes.forEach(c => { const th = document.createElement("th"); th.innerText = c; thead_tr.appendChild(th); });
+
+                days.forEach(d => {
+                    for(let p = 1; p <= 7; p++) {
+                        const tr = document.createElement("tr");
+                        if(p === 1) { const tdDay = document.createElement("td"); tdDay.rowSpan = 7; tdDay.className = "day-col-js"; tdDay.innerHTML = `<b>${d}</b>`; tr.appendChild(tdDay); }
+                        const tdP = document.createElement("td"); tdP.className = "period-col-js"; tdP.innerText = `${p}`; tr.appendChild(tdP);
+
+                        classes.forEach(c => {
+                            const td = document.createElement("td");
+                            const key = Object.keys(gridData).find(k => String(gridData[k].day) === String(d) && String(gridData[k].period) === String(p) && String(gridData[k].cls) === String(c));
+                            renderCellContent(td, key, 'FULL');
+                            tr.appendChild(td);
+                        });
+                        tbody.appendChild(tr);
+                    }
+                });
+            } else {
+                table.style.minWidth = '100%'; 
+                thead_tr.innerHTML = '<th class="period-col-js">교시</th>';
+                days.forEach(d => {
+                    let d_items = Object.values(gridData).filter(i => i.day === d);
+                    let d_str = d_items.length > 0 ? d_items[0].date.split('-').slice(1).join('/') : '';
+                    let th = document.createElement("th"); 
+                    th.innerHTML = `${d}<br><span style='font-size:10px; font-weight:normal; color:#94a3b8;'>(${d_str})</span>`;
+                    thead_tr.appendChild(th); 
+                });
+
+                for(let p = 1; p <= 7; p++) {
+                    const tr = document.createElement("tr");
+                    const tdP = document.createElement("td"); tdP.className = "period-col-js"; tdP.innerText = `${p}교시`; tr.appendChild(tdP);
+
+                    days.forEach(d => {
+                        const td = document.createElement("td");
+                        let matchItems = [];
+                        if(viewMode === 'TEACHER') {
+                            matchItems = Object.values(gridData).filter(i => String(i.day) === String(d) && String(i.period) === String(p) && (i.teacher === targetName || i.sub_teacher === targetName));
+                        } else {
+                            matchItems = Object.values(gridData).filter(i => String(i.day) === String(d) && String(i.period) === String(p) && String(i.cls) === targetName);
+                        }
+
+                        if(matchItems.length > 0) {
+                            let item = matchItems[0];
+                            let key = Object.keys(gridData).find(k => gridData[k] === item);
+                            renderCellContent(td, key, viewMode);
+                        } else {
+                            td.innerText = "-";
+                        }
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                }
+            }
+        }
+
+        function renderCellContent(td, key, mode) {
+            if(!key || !gridData[key]) { td.innerText = "-"; return; }
+            const item = gridData[key]; td.id = key;
+            if(item.is_sub) td.className = "bg-sub"; else if(item.is_swapped) td.className = "bg-swap";
+            
+            let txt = "-";
+            if(item.subj) {
+                if(mode === 'FULL') {
+                    if(item.is_sub) txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">대강</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">(${item.sub_teacher})</span>`;
+                    else if(item.is_swapped) txt = `<span style="font-size:9px; background:#eab308; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">변동</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">(${item.teacher})</span>`;
+                    else txt = `<b style="font-size:13.5px; color:#0f172a;">${item.subj}</b><br><span style="color:#64748b; font-size:10.5px; font-weight:600;">(${item.teacher})</span>`;
+                } else if(mode === 'TEACHER') {
+                    if(item.is_sub) {
+                        if(item.sub_teacher === targetName) txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">📝대강 [${item.cls}]</span><br><b style="font-size:13px;">${item.subj}</b>`;
+                        else txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">📝대강 (${item.sub_teacher})</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;"><s>${item.teacher}</s> ➔ <b>${item.sub_teacher}</b></span>`;
+                    } else if(item.is_swapped) {
+                        txt = `<span style="font-size:9px; background:#eab308; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">🔄교체됨</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">[${item.cls}]</span>`;
+                    } else {
+                        txt = `<b style="font-size:13.5px; color:#0f172a;">${item.subj}</b><br><span style="color:#64748b; font-size:10.5px; font-weight:600;">[${item.cls}]</span>`;
+                    }
+                } else if(mode === 'CLASS') {
+                    if(item.is_sub) {
+                        let st = item.sub_teacher === "빈칸" ? "" : item.sub_teacher;
+                        txt = `<span style="font-size:9px; background:#f97316; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">📝대강 (${st})</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;"><s>${item.teacher}</s> ➔ <b>${st}</b></span>`;
+                    } else if(item.is_swapped) {
+                        txt = `<span style="font-size:9px; background:#eab308; color:white; padding:1px 4px; border-radius:6px; font-weight:800;">🔄교체됨</span><br><b style="font-size:13px;">${item.subj}</b><br><span style="font-size:10px; color:#64748b;">(${item.teacher})</span>`;
+                    } else {
+                        txt = `<b style="font-size:13.5px; color:#0f172a;">${item.subj}</b><br><span style="color:#64748b; font-size:10.5px; font-weight:600;">(${item.teacher})</span>`;
+                    }
+                }
+            }
+            td.innerHTML = txt;
+            
+            if(allowEdit && item.subj) {
+                td.onclick = (e) => selectCell(key, td);
+                td.oncontextmenu = (e) => { e.preventDefault(); selectCell(key, td); showContextMenu(e.pageX, e.pageY); };
+            }
+        }
+
+        function selectCell(key, element) {
+            document.querySelectorAll(".admin-table td").forEach(td => td.classList.remove("selected"));
+            selectedKey = key; selectedTdElement = element; if(element) element.classList.add("selected");
+            hideAllPopups();
+        }
+
+        function positionPopup(popId) {
+            const pop = document.getElementById(popId);
+            const rect = selectedTdElement.getBoundingClientRect();
+            pop.style.display = "block";
+            const popWidth = pop.offsetWidth || 310; 
+            const popHeight = pop.offsetHeight || 250; 
+            let popLeft = rect.left + window.pageXOffset;
+            let popTop = rect.bottom + window.pageYOffset + 5;
+            
+            if(popLeft + popWidth > window.innerWidth + window.pageXOffset) { popLeft = window.innerWidth + window.pageXOffset - popWidth - 15; }
+            if(popLeft < 10) popLeft = 10;
+            if(popTop + popHeight > window.innerHeight + window.pageYOffset) { popTop = rect.top + window.pageYOffset - popHeight - 5; }
+            if(popTop < 10) popTop = 10;
+            
+            pop.style.left = `${popLeft}px`; pop.style.top = `${popTop}px`; 
+        }
+
+        function showContextMenu(x, y) {
+            const menu = document.getElementById("contextMenu");
+            
+            if(isAdmin) {
+                document.getElementById("adminDelBtn").style.display = "flex";
+                document.getElementById("adminCopyBtn").style.display = "flex";
+                document.getElementById("pasteMenuBtn").style.display = copiedData ? "flex" : "none";
+                document.getElementById("adminDivider").style.display = "block";
+                document.getElementById("adminSubBtn").style.display = "flex";
+            } else {
+                document.getElementById("adminDelBtn").style.display = "none";
+                document.getElementById("adminCopyBtn").style.display = "none";
+                document.getElementById("pasteMenuBtn").style.display = "none";
+                document.getElementById("adminDivider").style.display = "none";
+                document.getElementById("adminSubBtn").style.display = "none";
+            }
+
+            menu.style.display = "block";
+            const menuWidth = menu.offsetWidth || 200;
+            const menuHeight = menu.offsetHeight || 250;
+            let popLeft = x; let popTop = y;
+            if(x + menuWidth > window.innerWidth + window.pageXOffset) { popLeft = window.innerWidth + window.pageXOffset - menuWidth - 10; }
+            if(popLeft < 10) popLeft = 10;
+            if(y + menuHeight > window.innerHeight + window.pageYOffset) { popTop = y - menuHeight - 5; }
+            if(popTop < 10) popTop = 10;
+            
+            menu.style.left = `${popLeft}px`; menu.style.top = `${popTop}px`; 
+        }
+
+        function hideAllPopups() {
+            document.getElementById("contextMenu").style.display = "none";
+            document.getElementById("pastePopover").style.display = "none";
+            document.getElementById("crossSwapPopover").style.display = "none";
+            document.getElementById("subPopover").style.display = "none";
+        }
+
+        function openPastePopover() {
+            hideAllPopups();
+            if(!copiedData || !selectedKey) return;
+            const effT = getEffectiveTeacher(copiedData);
+            document.getElementById("pastePopInfo").innerHTML = `복사: <b>${copiedData.subj}(${effT})</b><br>대상: <b>[${gridData[selectedKey].cls}] ${gridData[selectedKey].day} ${gridData[selectedKey].period}교시</b>`;
+            positionPopup("pastePopover");
+        }
+
+        function openCrossSwapPopover() {
+            hideAllPopups();
+            if(!selectedKey) return;
+            const t = gridData[selectedKey];
+            if(!t.subj) { showToast("⚠️ 빈 셀은 교체할 수 없습니다."); return; }
+            
+            const btnText = isAdmin ? "✅ 맞교환 즉시 확정" : "📩 맞교환 승인 요청하기";
+            document.getElementById("swapSubmitBtn").innerText = btnText;
+            
+            // 🚨 누락 복구: 대강 교사가 팝업창에 제대로 표시되도록 수정
+            const effT = getEffectiveTeacher(t);
+            document.getElementById("crossSwapPopInfo").innerHTML = `교체 기준: <b>[${t.cls}] ${t.subj}(${effT})</b>`;
+            
+            const dInput = document.getElementById("crossSwapDateInput");
+            dInput.value = t.date;
+            updateSwapCandidates();
+            positionPopup("crossSwapPopover");
+        }
+
+        // 🚨 누락 복구: 양방향 시수 중복 필터링 (대강 교사 완벽 호환)
+        function updateSwapCandidates() {
+            const t = gridData[selectedKey];
+            const selDate = document.getElementById("crossSwapDateInput").value;
+            const candSelect = document.getElementById("swapCandidateSelect");
+            candSelect.innerHTML = "";
+            
+            if(!selDate) return;
+            const targetDayNum = new Date(selDate).getDay();
+            if(targetDayNum === 0 || targetDayNum === 6) { candSelect.innerHTML = '<option value="">주말은 불가</option>'; return; }
+            
+            const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+            const targetDayKr = dayNames[targetDayNum];
+            
+            const effT = getEffectiveTeacher(t);
+            
+            const basicCandidates = Object.values(gridData).filter(item => {
+                const effItem = getEffectiveTeacher(item);
+                return String(item.cls) === String(t.cls) && 
+                       String(item.day) === String(targetDayKr) && 
+                       item.subj !== "" && item.subj !== "-" &&
+                       !(String(item.date) === String(t.date) && Number(item.period) === Number(t.period)) &&
+                       String(effItem) !== String(effT);
+            });
+            
+            const validCandidates = basicCandidates.filter(t2 => {
+                const effT2 = getEffectiveTeacher(t2);
+                
+                const conflict1 = Object.values(gridData).some(cell => {
+                    if (String(cell.date) === String(t2.date) && Number(cell.period) === Number(t2.period)) return false;
+                    const effCell = getEffectiveTeacher(cell);
+                    return String(cell.day) === String(t2.day) && 
+                           Number(cell.period) === Number(t2.period) && 
+                           String(cell.cls) !== String(t.cls) && 
+                           effCell === effT;
+                });
+                
+                const conflict2 = Object.values(gridData).some(cell => {
+                    if (String(cell.date) === String(t.date) && Number(cell.period) === Number(t.period)) return false;
+                    const effCell = getEffectiveTeacher(cell);
+                    return String(cell.day) === String(t.day) && 
+                           Number(cell.period) === Number(t.period) && 
+                           String(cell.cls) !== String(t2.cls) && 
+                           effCell === effT2;
+                });
+                return !conflict1 && !conflict2;
+            });
+            
+            if(validCandidates.length === 0) {
+                candSelect.innerHTML = '<option value="">충돌 없는 교체 후보가 없습니다.</option>';
+            } else {
+                validCandidates.forEach(c => {
+                    const effC = getEffectiveTeacher(c);
+                    const opt = document.createElement("option");
+                    // DB에는 원래 배정된 원교사 이름을 넘겨야 정확한 교체가 일어남
+                    opt.value = JSON.stringify({period2: c.period, subj2: c.subj, teacher2: c.teacher});
+                    opt.innerText = `${c.period}교시 - ${c.subj} (${effC})`;
+                    candSelect.appendChild(opt);
+                });
+            }
+        }
+
+        function submitSmartSwap() {
+            const dateVal = document.getElementById("crossSwapDateInput").value;
+            const candVal = document.getElementById("swapCandidateSelect").value;
+            if(!candVal) { showToast("⚠️ 교체할 수업을 선택하세요."); return; }
+            
+            const target2 = JSON.parse(candVal);
+            dispatchAction('EXECUTE_CROSS_SWAP', {
+                s_date2: dateVal, period2: target2.period2, subj2: target2.subj2, teacher2: target2.teacher2, is_admin_action: isAdmin
+            });
+        }
+
+        function openSubPopover() {
+            hideAllPopups();
+            if(!selectedKey) return;
+            const t = gridData[selectedKey];
+            if(!t.subj) { showToast("⚠️ 빈 셀에는 대강을 지정할 수 없습니다."); return; }
+            document.getElementById("subPopInfo").innerHTML = `대강 대상: <b>[${t.cls}] ${t.subj} (${t.teacher})</b>`;
+            
+            const busyTeachers = Object.values(gridData).filter(i => String(i.day) === String(t.day) && Number(i.period) === Number(t.period) && i.teacher).map(i => i.teacher);
+            const avail = teacherList.filter(tea => !busyTeachers.includes(tea) && tea !== t.teacher);
+            const sel = document.getElementById("subTeacherSelect"); sel.innerHTML = "";
+            if(avail.length === 0) { sel.innerHTML = '<option value="">가능한 교사 없음</option>'; } 
+            else { avail.forEach(tea => { const opt = document.createElement("option"); opt.value = tea; opt.innerText = tea; sel.appendChild(opt); }); }
+            positionPopup("subPopover");
+        }
+
+        function copyCurrentCell() {
+            const t = gridData[selectedKey];
+            if(t && t.subj) { copiedData = t; const effT = getEffectiveTeacher(t); showToast(`📋 복사 완료: ${t.subj}(${effT})`); dispatchAction("COPY"); } 
+            else { showToast("⚠️ 빈 셀은 복사 불가"); hideAllPopups(); }
+        }
+
+        function dispatchAction(act, extraData = {}) {
+            hideAllPopups();
+            const payload = Object.assign({ action_id: Date.now().toString(), act: act, target: gridData[selectedKey], copiedData: copiedData }, extraData);
+            sendMessageToStreamlit(payload);
+        }
+
+        window.onclick = (e) => { if(!e.target.closest(".context-menu") && !e.target.closest(".popover")) hideAllPopups(); };
+        window.addEventListener("keydown", (e) => {
+            if(!selectedKey || !isAdmin) return;
+            if(e.key === "Delete" || e.key === "Backspace") { selectedTdElement.innerHTML = "-"; selectedTdElement.className = ""; showToast("🗑️ 삭제 완료"); dispatchAction("DELETE"); }
+            else if(e.ctrlKey && e.key === "c") { copyCurrentCell(); }
+            else if(e.ctrlKey && e.key === "v") { if(copiedData) openPastePopover(); else showToast("⚠️ 복사된 데이터가 없습니다."); }
+        });
+    </script>
+</head>
+<body onload="Streamlit.setComponentReady()">
+    <div id="jsToast"></div>
+    <table class="admin-table">
+        <thead><tr id="grid-head-tr"></tr></thead><tbody id="grid-body"></tbody>
+    </table>
+    
+    <div id="contextMenu" class="context-menu">
+        <div id="adminDelBtn" class="context-menu-item" onclick="dispatchAction('DELETE')">🗑️ 수업 삭제 (빈칸)</div>
+        <div id="adminCopyBtn" class="context-menu-item" onclick="copyCurrentCell()">📋 수업 복사 (Ctrl+C)</div>
+        <div id="pasteMenuBtn" class="context-menu-item" style="display:none;" onclick="openPastePopover()">📥 붙여넣기 (이동/교체)</div>
+        <div class="context-menu-divider" id="adminDivider"></div>
+        <div class="context-menu-item" onclick="openCrossSwapPopover()">🔄 수업 맞교환 (교체/요청)</div>
+        <div id="adminSubBtn" class="context-menu-item" onclick="openSubPopover()">📝 스마트 대강 지정</div>
+    </div>
+    
+    <div id="pastePopover" class="popover">
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">📋 붙여넣기 방식 선택</div>
+        <div id="pastePopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
+        <button class="pop-btn btn-primary" onclick="dispatchAction('PASTE_OVERWRITE')">1. 수업 이동 (덮어쓰기)</button>
+        <button class="pop-btn btn-swap" onclick="dispatchAction('PASTE_SWAP')">2. 맞교환 (서로 교체)</button>
+        <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
+    </div>
+
+    <div id="crossSwapPopover" class="popover">
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">🔄 스마트 수업 교체</div>
+        <div id="crossSwapPopInfo" style="font-size:12px; color:#475569; margin-bottom:8px;"></div>
+        <label style="font-size:11px; font-weight:bold; color:#334155;">1. 교체할 날짜 선택:</label>
+        <input type="date" id="crossSwapDateInput" class="pop-input" onchange="updateSwapCandidates()">
+        <label style="font-size:11px; font-weight:bold; color:#334155;">2. 교체 대상 수업 선택:</label>
+        <select id="swapCandidateSelect" class="pop-input"></select>
+        <button id="swapSubmitBtn" class="pop-btn btn-swap" onclick="submitSmartSwap()">✅ 진행하기</button>
+        <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
+    </div>
+
+    <div id="subPopover" class="popover">
+        <div style="font-weight:bold; color:#0284c7; margin-bottom:4px;">📝 스마트 대강 지정</div>
+        <div id="subPopInfo" style="font-size:12px; color:#475569; margin-bottom:6px;"></div>
+        <label style="font-size:11px; font-weight:bold;">대강 사유:</label>
+        <input type="text" id="subReasonInput" class="pop-input" placeholder="출장, 공결 등">
+        <label style="font-size:11px; font-weight:bold;">가능한 교사:</label>
+        <select id="subTeacherSelect" class="pop-input"></select>
+        <button class="pop-btn btn-primary" onclick="dispatchAction('SUB_DIRECT', {sub_t: document.getElementById('subTeacherSelect').value, sub_r: document.getElementById('subReasonInput').value})">대강 저장 적용</button>
+        <button class="pop-btn btn-close" onclick="hideAllPopups()">취소</button>
+    </div>
+</body>
+</html>
